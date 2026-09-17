@@ -1,0 +1,12 @@
+1. Tenant_config file provides configuration to the flask application to connect with database to host multiple web-application over same machine && database
+
+
+2. Following command is used to revive the mongodb connection:
+	sudo mongod --dbpath "/Users/surendrabishnoi/Documents/Freelancing/React-Projects/NGO/ngo_back-end/data/db"
+
+
+	to connect with db in the terminal:
+			mongosh
+	
+	to start mongoldb from scratch we need to make a data directory to accommodate mongoldb files/collection
+

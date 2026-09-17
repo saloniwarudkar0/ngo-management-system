@@ -1,0 +1,17 @@
+# Frontend
+ngo-front-end/node_modules/
+ngo-front-end/build/
+ngo-front-end/.env
+ngo-front-end/.env.local
+
+# Backend
+ngo_back-end/venv/
+ngo_back-end/.venv/
+ngo_back-end/__pycache__/
+ngo_back-end/.env
+ngo_back-end/*.pyc
+
+# General
+/build/
+.DS_Store
+Thumbs.db

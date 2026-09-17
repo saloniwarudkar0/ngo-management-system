@@ -1,0 +1,100 @@
+:root {
+  --fc-small-font-size: 0.82rem;
+  --fc-page-bg-color: #ffffff;
+  --fc-neutral-bg-color: #f8fafc;
+  --fc-neutral-text-color: #64748b;
+  --fc-border-color: #e2e8f0;
+  --fc-button-text-color: #ffffff;
+  --fc-button-bg-color: #0f766e;
+  --fc-button-border-color: #0f766e;
+  --fc-button-hover-bg-color: #115e59;
+  --fc-button-hover-border-color: #115e59;
+  --fc-button-active-bg-color: #134e4a;
+  --fc-button-active-border-color: #134e4a;
+  --fc-event-bg-color: #0891b2;
+  --fc-event-border-color: #0891b2;
+  --fc-event-text-color: #ffffff;
+  --fc-today-bg-color: rgba(20, 184, 166, 0.08);
+}
+
+.calendar-shell .fc {
+  color: #334155;
+  font-family: inherit;
+}
+
+.calendar-shell .fc .fc-toolbar {
+  margin-bottom: 1.75rem;
+}
+
+.calendar-shell .fc .fc-toolbar-title {
+  color: #0f172a;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.calendar-shell .fc .fc-button-primary {
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none !important;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.9rem;
+}
+
+.calendar-shell .fc .fc-button-group {
+  gap: 0.35rem;
+}
+
+.calendar-shell .fc .fc-button-group > .fc-button {
+  border-radius: 999px;
+}
+
+.calendar-shell .fc-theme-standard th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.8rem 0.25rem;
+  text-transform: uppercase;
+}
+
+.calendar-shell .fc .fc-daygrid-day-number {
+  color: #475569;
+  font-size: 0.875rem;
+  padding: 0.55rem;
+}
+
+.calendar-shell .fc .fc-daygrid-event {
+  border-radius: 0.45rem;
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .calendar-shell .fc .fc-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .calendar-shell .fc .fc-toolbar-chunk:last-child {
+    display: flex;
+    width: 100%;
+  }
+
+  .calendar-shell .fc .fc-toolbar-title {
+    font-size: 1.25rem;
+  }
+
+  .calendar-shell .fc .fc-daygrid-day-number {
+    font-size: 0.75rem;
+    padding: 0.35rem;
+  }
+
+  .calendar-shell .fc .fc-col-header-cell-cushion {
+    font-size: 0.65rem;
+  }
+}

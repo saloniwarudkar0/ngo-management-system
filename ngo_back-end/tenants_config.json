@@ -1,0 +1,10 @@
+{
+  "localhost": {
+    "connection_uri": "mongodb://127.0.0.1:27017",
+    "db_name": "localhost"
+  },
+  "127.0.0.1": {
+    "connection_uri": "mongodb://127.0.0.1:27017",
+    "db_name": "localhost"
+  }
+}

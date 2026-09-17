@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+  background: #f8fafc;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: "Avenir Next", Avenir, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #99f6e4;
+  color: #134e4a;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(20, 184, 166, 0.4);
+  outline-offset: 3px;
+}
+
+@layer components {
+  .site-container {
+    @apply mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-10;
+  }
+
+  .section-kicker {
+    @apply text-sm font-semibold uppercase tracking-[0.18em] text-teal-700;
+  }
+
+  .section-title {
+    @apply text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl;
+  }
+
+  .primary-button {
+    @apply inline-flex min-h-12 items-center justify-center rounded-full bg-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-teal-950/15 transition hover:-translate-y-0.5 hover:bg-teal-700;
+  }
+
+  .secondary-button {
+    @apply inline-flex min-h-12 items-center justify-center rounded-full border border-white/40 bg-white/10 px-6 py-3 text-base font-semibold text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/20;
+  }
+
+  .surface-card {
+    @apply rounded-3xl border border-slate-200/80 bg-white shadow-[0_18px_60px_-36px_rgba(15,23,42,0.45)];
+  }
+}
