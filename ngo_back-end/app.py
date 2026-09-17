@@ -123,9 +123,6 @@ def get_db(tenant_id):
 
     RENDER / PRODUCTION:
         Uses MONGODB_URI environment variable.
-
-    This keeps the MongoDB Atlas password
-    out of GitHub.
     """
 
     tenant_config = tenants_config.get(
@@ -289,21 +286,33 @@ def set_tenant():
     # PRODUCTION
     # -----------------------------------------------------
     #
-    # When MONGODB_URI exists, the application is running
-    # with the production MongoDB Atlas database.
+    # Render has MONGODB_URI.
     #
-    # The frontend uses "localhost" as the application
-    # tenant identifier while the actual database URI
-    # comes from MONGODB_URI.
+    # The frontend may send either:
     #
+    # localhost
+    # OR
+    # ngo-management-systemm.vercel.app
+    #
+    # Both are mapped to the localhost tenant.
+    #
+    # The actual MongoDB connection comes from
+    # MONGODB_URI on Render.
+    # -----------------------------------------------------
 
     if os.getenv(
         'MONGODB_URI'
     ):
 
-        if tenant_id == 'localhost':
+        production_tenants = {
+            'localhost',
+            'ngo-management-systemm.vercel.app'
+        }
 
-            request.tenant_id = tenant_id
+
+        if tenant_id in production_tenants:
+
+            request.tenant_id = 'localhost'
 
             return
 
@@ -2331,13 +2340,6 @@ def create_project(
     current_user
 ):
 
-    """
-    Create a new project.
-
-    A project can contain maximum 3 PDFs.
-    """
-
-
     db = get_db(
         request.tenant_id
     )
@@ -3271,16 +3273,3 @@ if __name__ == "__main__":
         port=port,
         debug=debug
     )
-
-
-# =========================================================
-# LOCAL TENANT CONFIG
-# =========================================================
-
-# "localhost": {
-#     "connection_uri":
-#         "mongodb://127.0.0.1:27017",
-#
-#     "db_name":
-#         "localhost"
-# }
