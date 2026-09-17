@@ -1,6 +1,5 @@
 from flask import Flask, request, g, jsonify, send_from_directory
 import jwt
-import datetime
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from flask_cors import CORS
@@ -105,7 +104,6 @@ tenants_config_path = Path(
 
 
 with tenants_config_path.open() as f:
-
     tenants_config = json.load(f)
 
 
@@ -115,57 +113,28 @@ with tenants_config_path.open() as f:
 
 def get_db(tenant_id):
 
-    """
-    Get a database connection for a given tenant.
-
-    LOCAL:
-        Uses tenants_config.json
-
-    RENDER / PRODUCTION:
-        Uses MONGODB_URI environment variable.
-    """
-
     tenant_config = tenants_config.get(
         tenant_id
     )
 
-
     if not tenant_config:
-
         raise ValueError(
             "Invalid tenant ID"
         )
-
-
-    # -----------------------------------------------------
-    # DATABASE CONNECTION URI
-    # -----------------------------------------------------
 
     connection_uri = os.getenv(
         'MONGODB_URI'
     )
 
-
     if not connection_uri:
-
         connection_uri = tenant_config[
             'connection_uri'
         ]
-
-
-    # -----------------------------------------------------
-    # DATABASE NAME
-    # -----------------------------------------------------
 
     db_name = os.getenv(
         'MONGODB_DB_NAME',
         tenant_config['db_name']
     )
-
-
-    # -----------------------------------------------------
-    # CREATE CONNECTION
-    # -----------------------------------------------------
 
     if 'db' not in g:
 
@@ -177,7 +146,6 @@ def get_db(tenant_id):
         g.db = client[
             db_name
         ]
-
 
     return g.db
 
@@ -211,9 +179,7 @@ def password_matches(
         not stored_password
         or not submitted_password
     ):
-
         return False
-
 
     if is_password_hash(
         stored_password
@@ -223,7 +189,6 @@ def password_matches(
             stored_password,
             submitted_password
         )
-
 
     return hmac.compare_digest(
         stored_password,
@@ -238,36 +203,19 @@ def password_matches(
 @app.before_request
 def set_tenant():
 
-    # -----------------------------------------------------
-    # OPTIONS / CORS PREFLIGHT
-    # -----------------------------------------------------
-
     if request.method == 'OPTIONS':
-
         return
-
-
-    # -----------------------------------------------------
-    # PUBLIC ENDPOINTS
-    # -----------------------------------------------------
 
     if request.endpoint in {
         'health',
         'serve_local_file',
         'upload_local_file'
     }:
-
         return
-
-
-    # -----------------------------------------------------
-    # GET TENANT ID
-    # -----------------------------------------------------
 
     tenant_id = request.headers.get(
         'x-tenant-id'
     )
-
 
     if not tenant_id:
 
@@ -281,23 +229,8 @@ def set_tenant():
 
         }), 400
 
-
     # -----------------------------------------------------
-    # PRODUCTION
-    # -----------------------------------------------------
-    #
-    # Render has MONGODB_URI.
-    #
-    # The frontend may send either:
-    #
-    # localhost
-    # OR
-    # ngo-management-systemm.vercel.app
-    #
-    # Both are mapped to the localhost tenant.
-    #
-    # The actual MongoDB connection comes from
-    # MONGODB_URI on Render.
+    # PRODUCTION / RENDER
     # -----------------------------------------------------
 
     if os.getenv(
@@ -309,13 +242,11 @@ def set_tenant():
             'ngo-management-systemm.vercel.app'
         }
 
-
         if tenant_id in production_tenants:
 
             request.tenant_id = 'localhost'
 
             return
-
 
     # -----------------------------------------------------
     # LOCAL DEVELOPMENT
@@ -333,7 +264,6 @@ def set_tenant():
 
         }), 400
 
-
     request.tenant_id = tenant_id
 
 
@@ -349,9 +279,7 @@ def close_connection(exception):
         None
     )
 
-
     if db is not None:
-
         db.client.close()
 
 
@@ -370,7 +298,6 @@ def health():
         'localhost'
     )
 
-
     if tenant_id not in tenants_config:
 
         return jsonify({
@@ -383,7 +310,6 @@ def health():
 
         }), 400
 
-
     try:
 
         get_db(
@@ -391,7 +317,6 @@ def health():
         ).command(
             'ping'
         )
-
 
     except Exception as error:
 
@@ -410,7 +335,6 @@ def health():
                 False,
 
         }), 503
-
 
     return jsonify({
 
@@ -444,11 +368,9 @@ def safe_upload_path(key):
         '/'
     )
 
-
     relative_path = PurePosixPath(
         normalized_key
     )
-
 
     if (
         relative_path.is_absolute()
@@ -459,11 +381,9 @@ def safe_upload_path(key):
             'Invalid upload path'
         )
 
-
     target = UPLOAD_DIR.joinpath(
         *relative_path.parts
     ).resolve()
-
 
     if (
         target != UPLOAD_DIR
@@ -473,7 +393,6 @@ def safe_upload_path(key):
         raise ValueError(
             'Invalid upload path'
         )
-
 
     return target
 
@@ -494,20 +413,16 @@ def upload_local_file(key):
             key
         )
 
-
         target.parent.mkdir(
             parents=True,
             exist_ok=True
         )
 
-
         target.write_bytes(
             request.get_data()
         )
 
-
         return '', 200
-
 
     except ValueError as error:
 
@@ -545,19 +460,15 @@ def serve_local_file(key):
 def delete_media_url(image_url):
 
     if not image_url:
-
         return
-
 
     parsed_url = urlparse(
         image_url
     )
 
-
     local_marker = (
         '/api/local-files/'
     )
-
 
     # -----------------------------------------------------
     # LOCAL STORAGE
@@ -570,19 +481,15 @@ def delete_media_url(image_url):
             1
         )[1]
 
-
         target = safe_upload_path(
             local_key
         )
-
 
         target.unlink(
             missing_ok=True
         )
 
-
         return
-
 
     # -----------------------------------------------------
     # AWS S3
@@ -594,11 +501,9 @@ def delete_media_url(image_url):
             f"{AWS_BUCKET_NAME}.s3.amazonaws.com/"
         )
 
-
         object_key = image_url.split(
             s3_prefix
         )[-1]
-
 
         s3_client.delete_object(
 
@@ -609,9 +514,7 @@ def delete_media_url(image_url):
                 object_key
         )
 
-
         return
-
 
     raise RuntimeError(
         'Remote media deletion is unavailable '
@@ -642,7 +545,6 @@ def delete_media_prefix(prefix):
             )
         )
 
-
         if 'Contents' in objects_to_delete:
 
             keys = [
@@ -655,7 +557,6 @@ def delete_media_prefix(prefix):
                 for item
                 in objects_to_delete['Contents']
             ]
-
 
             s3_client.delete_objects(
 
@@ -672,9 +573,7 @@ def delete_media_prefix(prefix):
                 }
             )
 
-
         return
-
 
     # -----------------------------------------------------
     # LOCAL STORAGE
@@ -683,7 +582,6 @@ def delete_media_prefix(prefix):
     target = safe_upload_path(
         prefix
     )
-
 
     if (
         target.exists()
@@ -711,7 +609,6 @@ def token_required(f):
             'Authorization'
         )
 
-
         if not token:
 
             return jsonify({
@@ -724,13 +621,17 @@ def token_required(f):
 
             }), 401
 
-
         try:
 
-            token = token.split(
+            token_parts = token.split(
                 " "
-            )[1]
+            )
 
+            if len(token_parts) != 2:
+
+                raise jwt.InvalidTokenError
+
+            token = token_parts[1]
 
             decoded = jwt.decode(
 
@@ -743,7 +644,6 @@ def token_required(f):
                 ]
             )
 
-
             current_user = get_db(
                 request.tenant_id
             ).volunteers.find_one({
@@ -754,11 +654,9 @@ def token_required(f):
                     )
             })
 
-
             if not current_user:
 
                 raise jwt.InvalidTokenError
-
 
         except jwt.ExpiredSignatureError:
 
@@ -772,8 +670,10 @@ def token_required(f):
 
             }), 401
 
-
-        except jwt.InvalidTokenError:
+        except (
+            jwt.InvalidTokenError,
+            Exception
+        ):
 
             return jsonify({
 
@@ -785,7 +685,6 @@ def token_required(f):
 
             }), 401
 
-
         return f(
 
             current_user,
@@ -795,7 +694,6 @@ def token_required(f):
             **kwargs
 
         )
-
 
     return decorated
 
@@ -814,16 +712,17 @@ def login():
         request.tenant_id
     )
 
+    data = request.get_json(
+        silent=True
+    ) or {}
 
-    username = request.json.get(
+    username = data.get(
         'username'
     )
 
-
-    password = request.json.get(
+    password = data.get(
         'password'
     )
-
 
     if (
         not username
@@ -840,14 +739,12 @@ def login():
 
         }), 400
 
-
     user = db.volunteers.find_one({
 
         'mobile':
             username
 
     })
-
 
     if (
         user
@@ -860,9 +757,13 @@ def login():
             password
 
         )
-        and user['role']
+        and user.get('role')
         == 'Head-Volunteer'
     ):
+
+        # -------------------------------------------------
+        # Upgrade old plain-text passwords automatically
+        # -------------------------------------------------
 
         if not is_password_hash(
             user.get(
@@ -888,24 +789,26 @@ def login():
                 }
             )
 
+        # -------------------------------------------------
+        # JWT PAYLOAD
+        # -------------------------------------------------
 
         payload = {
 
             'exp':
-                datetime.datetime.utcnow()
+                datetime.utcnow()
                 + timedelta(
                     days=1
                 ),
 
             'iat':
-                datetime.datetime.utcnow(),
+                datetime.utcnow(),
 
             'sub':
                 str(
                     user['_id']
                 )
         }
-
 
         token = jwt.encode(
 
@@ -915,7 +818,6 @@ def login():
 
             algorithm='HS256'
         )
-
 
         return jsonify({
 
@@ -929,7 +831,6 @@ def login():
                 True
 
         }), 200
-
 
     else:
 
@@ -972,7 +873,6 @@ def verify_token(current_user):
 
     }
 
-
     return jsonify(
         user_info
     ), 200
@@ -995,15 +895,9 @@ def create_volunteer(
         request.tenant_id
     )
 
-
-    user_data = request.json
-
-
-    print(
-        "here is the userData",
-        user_data
-    )
-
+    user_data = request.get_json(
+        silent=True
+    ) or {}
 
     if not user_data:
 
@@ -1017,7 +911,6 @@ def create_volunteer(
 
         }), 400
 
-
     try:
 
         if user_data.get(
@@ -1030,21 +923,17 @@ def create_volunteer(
                 )
             )
 
-
         user_data['created_by'] = (
             current_user['_id']
         )
-
 
         user_data['created_at'] = (
             datetime.now()
         )
 
-
         result = db.volunteers.insert_one(
             user_data
         )
-
 
         return jsonify({
 
@@ -1060,7 +949,6 @@ def create_volunteer(
                 True
 
         }), 201
-
 
     except Exception as e:
 
@@ -1093,9 +981,9 @@ def update_volunteer(
         request.tenant_id
     )
 
-
-    data = request.json
-
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     if not data:
 
@@ -1109,7 +997,6 @@ def update_volunteer(
 
         }), 400
 
-
     if data.get(
         'password'
     ):
@@ -1120,16 +1007,13 @@ def update_volunteer(
             )
         )
 
-
     data['modified_by'] = (
         current_user['_id']
     )
 
-
     data['modified_at'] = (
         datetime.now()
     )
-
 
     result = db.volunteers.update_one(
 
@@ -1144,7 +1028,6 @@ def update_volunteer(
         }
     )
 
-
     if result.matched_count == 0:
 
         return jsonify({
@@ -1156,7 +1039,6 @@ def update_volunteer(
                 False
 
         }), 404
-
 
     return jsonify({
 
@@ -1183,7 +1065,6 @@ def get_volunteers():
         request.tenant_id
     )
 
-
     try:
 
         documents = list(
@@ -1193,42 +1074,46 @@ def get_volunteers():
             })
         )
 
-
         results = []
-
 
         for doc in documents:
 
             k = {}
 
-
             k['_id'] = str(
                 doc['_id']
             )
-
 
             k['id'] = str(
                 doc['_id']
             )
 
+            k['name'] = doc.get(
+                'name',
+                ''
+            )
 
-            k['name'] = doc['name']
+            k['status'] = doc.get(
+                'status',
+                ''
+            )
 
+            k['role'] = doc.get(
+                'role',
+                ''
+            )
 
-            k['status'] = doc['status']
+            k['mobile'] = doc.get(
+                'mobile',
+                ''
+            )
 
-
-            k['role'] = doc['role']
-
-
-            k['mobile'] = doc['mobile']
-
-
-            k['address'] = doc['address']
-
+            k['address'] = doc.get(
+                'address',
+                ''
+            )
 
             results.append(k)
-
 
         return jsonify({
 
@@ -1239,7 +1124,6 @@ def get_volunteers():
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -1268,7 +1152,6 @@ def get_volunteer_requests():
         request.tenant_id
     )
 
-
     try:
 
         documents = list(
@@ -1278,9 +1161,7 @@ def get_volunteer_requests():
             })
         )
 
-
         results = []
-
 
         for doc in documents:
 
@@ -1288,20 +1169,16 @@ def get_volunteer_requests():
                 doc['_id']
             )
 
-
             doc['id'] = str(
                 doc['_id']
             )
-
 
             doc.pop(
                 'password',
                 None
             )
 
-
             results.append(doc)
-
 
         return jsonify({
 
@@ -1312,7 +1189,6 @@ def get_volunteer_requests():
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -1345,7 +1221,6 @@ def authorize_volunteer(
         request.tenant_id
     )
 
-
     result = db.volunteers.update_one(
 
         {
@@ -1369,7 +1244,6 @@ def authorize_volunteer(
         }
     )
 
-
     if result.matched_count == 0:
 
         return jsonify({
@@ -1381,7 +1255,6 @@ def authorize_volunteer(
                 False
 
         }), 404
-
 
     return jsonify({
 
@@ -1408,15 +1281,9 @@ def register_volunteer():
         request.tenant_id
     )
 
-
-    user_data = request.json
-
-
-    print(
-        "here is the userData",
-        user_data
-    )
-
+    user_data = request.get_json(
+        silent=True
+    ) or {}
 
     if not user_data:
 
@@ -1430,7 +1297,6 @@ def register_volunteer():
 
         }), 400
 
-
     existing_user = db.volunteers.find_one({
 
         "mobile":
@@ -1439,7 +1305,6 @@ def register_volunteer():
             )
 
     })
-
 
     if (
         existing_user
@@ -1461,13 +1326,11 @@ def register_volunteer():
 
         }), 409
 
-
     try:
 
         user_data['role'] = (
             'Volunteer'
         )
-
 
         user_data['password'] = (
             generate_password_hash(
@@ -1475,21 +1338,17 @@ def register_volunteer():
             )
         )
 
-
         user_data['status'] = (
             'pending'
         )
-
 
         user_data['created_at'] = (
             datetime.now()
         )
 
-
         result = db.volunteers.insert_one(
             user_data
         )
-
 
         return jsonify({
 
@@ -1505,7 +1364,6 @@ def register_volunteer():
                 True
 
         }), 201
-
 
     except Exception as e:
 
@@ -1538,7 +1396,6 @@ def delete_volunteer(
         request.tenant_id
     )
 
-
     result = db.volunteers.update_one(
 
         {
@@ -1562,7 +1419,6 @@ def delete_volunteer(
         }
     )
 
-
     if result.matched_count == 0:
 
         return jsonify({
@@ -1574,7 +1430,6 @@ def delete_volunteer(
                 False
 
         }), 404
-
 
     return jsonify({
 
@@ -1604,15 +1459,9 @@ def create_event(
         request.tenant_id
     )
 
-
-    event_data = request.json
-
-
-    print(
-        "event data, ",
-        event_data
-    )
-
+    event_data = request.get_json(
+        silent=True
+    ) or {}
 
     if not event_data:
 
@@ -1626,23 +1475,19 @@ def create_event(
 
         }), 400
 
-
     try:
 
         event_data['created_by'] = (
             current_user['_id']
         )
 
-
         event_data['created_at'] = (
             datetime.now()
         )
 
-
         result = db.events.insert_one(
             event_data
         )
-
 
         return jsonify({
 
@@ -1658,7 +1503,6 @@ def create_event(
                 True
 
         }), 201
-
 
     except Exception as e:
 
@@ -1691,9 +1535,9 @@ def update_event(
         request.tenant_id
     )
 
-
-    event_data = request.json
-
+    event_data = request.get_json(
+        silent=True
+    ) or {}
 
     if not event_data:
 
@@ -1707,15 +1551,12 @@ def update_event(
 
         }), 400
 
-
     images_to_delete = event_data.pop(
         'imageTobeDeleted',
         []
     )
 
-
     errors = []
-
 
     for image_url in images_to_delete:
 
@@ -1727,15 +1568,9 @@ def update_event(
 
         except Exception as e:
 
-            print(
-                f"Error deleting image {image_url}: {e}"
-            )
-
-
             errors.append(
                 f"Failed to delete {image_url}: {str(e)}"
             )
-
 
     try:
 
@@ -1743,11 +1578,9 @@ def update_event(
             current_user['_id']
         )
 
-
         event_data['modified_at'] = (
             datetime.now()
         )
-
 
         result = db.events.update_one(
 
@@ -1762,7 +1595,6 @@ def update_event(
             }
         )
 
-
         if result.matched_count == 0:
 
             return jsonify({
@@ -1775,7 +1607,6 @@ def update_event(
 
             }), 404
 
-
         response = {
 
             "message":
@@ -1785,16 +1616,13 @@ def update_event(
                 True
         }
 
-
         if errors:
 
             response["warnings"] = errors
 
-
         return jsonify(
             response
         ), 200
-
 
     except Exception as e:
 
@@ -1827,7 +1655,6 @@ def delete_event(
         request.tenant_id
     )
 
-
     try:
 
         event = db.events.find_one({
@@ -1835,7 +1662,6 @@ def delete_event(
             "_id":
                 ObjectId(id)
         })
-
 
         if not event:
 
@@ -1849,11 +1675,9 @@ def delete_event(
 
             }), 404
 
-
         event_images_id = event.get(
             'eventImagesId'
         )
-
 
         if event_images_id:
 
@@ -1861,18 +1685,15 @@ def delete_event(
                 f"events/{event_images_id}"
             )
 
-
             delete_media_prefix(
                 prefix
             )
-
 
         result = db.events.delete_one({
 
             "_id":
                 ObjectId(id)
         })
-
 
         if result.deleted_count == 0:
 
@@ -1886,7 +1707,6 @@ def delete_event(
 
             }), 404
 
-
         return jsonify({
 
             "message":
@@ -1896,7 +1716,6 @@ def delete_event(
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -1925,66 +1744,69 @@ def get_events():
         request.tenant_id
     )
 
-
     try:
 
         documents = list(
             db.events.find()
         )
 
-
-        print(
-            "got all events here ",
-            documents
-        )
-
-
         results = []
-
 
         for doc in documents:
 
             k = {}
 
-
             k['id'] = str(
                 doc['_id']
             )
-
 
             k['_id'] = str(
                 doc['_id']
             )
 
-
-            k['name'] = doc['name']
-
-
-            k['title'] = doc['title']
-
-
-            k['start'] = doc['start']
-
-
-            k['end'] = doc['end']
-
-
-            k['address'] = doc['address']
-
-
-            k['description'] = doc['description']
-
-
-            k['images'] = doc['images']
-
-
-            k['eventImagesId'] = (
-                doc['eventImagesId']
+            k['name'] = doc.get(
+                'name',
+                ''
             )
 
+            k['title'] = doc.get(
+                'title',
+                ''
+            )
+
+            k['start'] = doc.get(
+                'start',
+                ''
+            )
+
+            k['end'] = doc.get(
+                'end',
+                ''
+            )
+
+            k['address'] = doc.get(
+                'address',
+                ''
+            )
+
+            k['description'] = doc.get(
+                'description',
+                ''
+            )
+
+            k['images'] = doc.get(
+                'images',
+                []
+            )
+
+            k['eventImagesId'] = (
+                doc.get(
+                    'eventImagesId',
+                    ''
+                )
+            )
 
             results.append(k)
-
 
         return jsonify({
 
@@ -1995,7 +1817,6 @@ def get_events():
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -2026,7 +1847,6 @@ def get_event_by_id(
         request.tenant_id
     )
 
-
     try:
 
         event = db.events.find_one({
@@ -2034,7 +1854,6 @@ def get_event_by_id(
             "_id":
                 ObjectId(event_id)
         })
-
 
         if not event:
 
@@ -2048,26 +1867,21 @@ def get_event_by_id(
 
             }), 404
 
-
         event['id'] = str(
             event['_id']
         )
-
 
         event['_id'] = str(
             event['_id']
         )
 
-
         event['created_by'] = str(
             event['created_by']
         )
 
-
         event['created_at'] = str(
             event['created_at']
         )
-
 
         event['modified_by'] = str(
             event.get(
@@ -2075,7 +1889,6 @@ def get_event_by_id(
                 ''
             )
         )
-
 
         return jsonify({
 
@@ -2086,7 +1899,6 @@ def get_event_by_id(
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -2111,10 +1923,25 @@ def get_event_by_id(
 )
 def generate_presigned_url():
 
-    file_name = request.json[
-        'key'
-    ]
+    data = request.get_json(
+        silent=True
+    ) or {}
 
+    file_name = data.get(
+        'key'
+    )
+
+    if not file_name:
+
+        return jsonify({
+
+            'error':
+                'File key is required',
+
+            'status':
+                False
+
+        }), 400
 
     try:
 
@@ -2144,9 +1971,7 @@ def generate_presigned_url():
                 )
             )
 
-
             storage = 's3'
-
 
         # -------------------------------------------------
         # LOCAL STORAGE
@@ -2158,12 +1983,10 @@ def generate_presigned_url():
                 file_name
             )
 
-
             encoded_file_name = quote(
                 file_name,
                 safe='/'
             )
-
 
             upload_url = (
                 f"{request.host_url.rstrip('/')}"
@@ -2171,9 +1994,7 @@ def generate_presigned_url():
                 f"{encoded_file_name}"
             )
 
-
             storage = 'local'
-
 
         return jsonify({
 
@@ -2191,7 +2012,6 @@ def generate_presigned_url():
 
         })
 
-
     except Exception as e:
 
         return jsonify({
@@ -2206,11 +2026,6 @@ def generate_presigned_url():
 
 
 # =========================================================
-# PROJECT APIs
-# =========================================================
-
-
-# =========================================================
 # PROJECT PDF NORMALIZER
 # =========================================================
 
@@ -2218,31 +2033,10 @@ def normalize_project_pdfs(
     project_data
 ):
 
-    """
-    Convert old single PDF format into the new
-    multiple PDF format.
-
-    Old:
-
-        pdf: "url"
-
-    New:
-
-        pdfs: [
-            "url1",
-            "url2",
-            "url3"
-        ]
-
-    Maximum 3 PDFs are allowed.
-    """
-
-
     pdfs = project_data.get(
         'pdfs',
         None
     )
-
 
     # -----------------------------------------------------
     # BACKWARD COMPATIBILITY
@@ -2255,7 +2049,6 @@ def normalize_project_pdfs(
             ''
         )
 
-
         if old_pdf:
 
             pdfs = [
@@ -2265,7 +2058,6 @@ def normalize_project_pdfs(
         else:
 
             pdfs = []
-
 
     # -----------------------------------------------------
     # VALIDATE ARRAY
@@ -2280,13 +2072,11 @@ def normalize_project_pdfs(
             'pdfs must be an array'
         )
 
-
     # -----------------------------------------------------
     # CLEAN VALUES
     # -----------------------------------------------------
 
     cleaned_pdfs = []
-
 
     for pdf in pdfs:
 
@@ -2297,21 +2087,16 @@ def normalize_project_pdfs(
 
             continue
 
-
         pdf = pdf.strip()
 
-
         if not pdf:
-
             continue
-
 
         if pdf not in cleaned_pdfs:
 
             cleaned_pdfs.append(
                 pdf
             )
-
 
     # -----------------------------------------------------
     # MAXIMUM 3
@@ -2322,7 +2107,6 @@ def normalize_project_pdfs(
         raise ValueError(
             'A project can have a maximum of 3 PDFs'
         )
-
 
     return cleaned_pdfs
 
@@ -2344,15 +2128,9 @@ def create_project(
         request.tenant_id
     )
 
-
-    project_data = request.json
-
-
-    print(
-        "project data, ",
-        project_data
-    )
-
+    project_data = request.get_json(
+        silent=True
+    ) or {}
 
     if not project_data:
 
@@ -2366,22 +2144,15 @@ def create_project(
 
         }), 400
 
-
     try:
-
-        # -------------------------------------------------
-        # NORMALIZE PDFs
-        # -------------------------------------------------
 
         project_pdfs = normalize_project_pdfs(
             project_data
         )
 
-
         project_data['pdfs'] = (
             project_pdfs
         )
-
 
         project_data['pdf'] = (
 
@@ -2393,29 +2164,17 @@ def create_project(
 
         )
 
-
-        # -------------------------------------------------
-        # CREATED INFORMATION
-        # -------------------------------------------------
-
         project_data['created_by'] = (
             current_user['_id']
         )
-
 
         project_data['created_at'] = (
             datetime.now()
         )
 
-
-        # -------------------------------------------------
-        # INSERT
-        # -------------------------------------------------
-
         result = db.projects.insert_one(
             project_data
         )
-
 
         return jsonify({
 
@@ -2435,7 +2194,6 @@ def create_project(
 
         }), 201
 
-
     except ValueError as e:
 
         return jsonify({
@@ -2447,7 +2205,6 @@ def create_project(
                 False
 
         }), 400
-
 
     except Exception as e:
 
@@ -2480,9 +2237,9 @@ def update_project(
         request.tenant_id
     )
 
-
-    project_data = request.json
-
+    project_data = request.get_json(
+        silent=True
+    ) or {}
 
     if not project_data:
 
@@ -2496,7 +2253,6 @@ def update_project(
 
         }), 400
 
-
     # =====================================================
     # FIND EXISTING PROJECT
     # =====================================================
@@ -2508,7 +2264,6 @@ def update_project(
             "_id":
                 ObjectId(id)
         })
-
 
         if not existing_project:
 
@@ -2522,7 +2277,6 @@ def update_project(
 
             }), 404
 
-
     except Exception as e:
 
         return jsonify({
@@ -2535,7 +2289,6 @@ def update_project(
 
         }), 400
 
-
     # =====================================================
     # DELETE SELECTED IMAGES
     # =====================================================
@@ -2544,7 +2297,6 @@ def update_project(
         'imageTobeDeleted',
         []
     )
-
 
     if not isinstance(
         images_to_delete,
@@ -2555,9 +2307,7 @@ def update_project(
             images_to_delete
         ]
 
-
     errors = []
-
 
     for image_url in images_to_delete:
 
@@ -2569,15 +2319,9 @@ def update_project(
 
         except Exception as e:
 
-            print(
-                f"Error deleting image {image_url}: {e}"
-            )
-
-
             errors.append(
                 f"Failed to delete {image_url}: {str(e)}"
             )
-
 
     # =====================================================
     # GET EXISTING PDFS
@@ -2589,11 +2333,9 @@ def update_project(
             existing_project
         )
 
-
     except ValueError:
 
         existing_pdfs = []
-
 
     # =====================================================
     # PDFS TO DELETE
@@ -2604,7 +2346,6 @@ def update_project(
         []
     )
 
-
     if not isinstance(
         pdfs_to_delete,
         list
@@ -2614,12 +2355,10 @@ def update_project(
             pdfs_to_delete
         ]
 
-
     old_pdf_to_delete = project_data.pop(
         'pdfTobeDeleted',
         ''
     )
-
 
     if old_pdf_to_delete:
 
@@ -2629,33 +2368,26 @@ def update_project(
                 old_pdf_to_delete
             )
 
-
     # =====================================================
     # CLEAN PDF DELETE LIST
     # =====================================================
 
     cleaned_delete_pdfs = []
 
-
     for pdf_url in pdfs_to_delete:
 
         if (
-
             isinstance(
                 pdf_url,
                 str
             )
-
             and pdf_url.strip()
-
             and pdf_url not in cleaned_delete_pdfs
-
         ):
 
             cleaned_delete_pdfs.append(
                 pdf_url
             )
-
 
     # =====================================================
     # DELETE PDF FILES
@@ -2671,15 +2403,9 @@ def update_project(
 
         except Exception as e:
 
-            print(
-                f"Error deleting PDF {pdf_url}: {e}"
-            )
-
-
             errors.append(
                 f"Failed to delete PDF: {str(e)}"
             )
-
 
     # =====================================================
     # HANDLE NEW PDF ARRAY
@@ -2699,11 +2425,6 @@ def update_project(
                 existing_pdfs.copy()
             )
 
-
-        # -------------------------------------------------
-        # Remove deleted PDFs
-        # -------------------------------------------------
-
         new_pdfs = [
 
             pdf
@@ -2713,11 +2434,6 @@ def update_project(
             if pdf not in cleaned_delete_pdfs
 
         ]
-
-
-        # -------------------------------------------------
-        # Maximum 3 PDFs
-        # -------------------------------------------------
 
         if len(new_pdfs) > 3:
 
@@ -2731,11 +2447,9 @@ def update_project(
 
             }), 400
 
-
         project_data['pdfs'] = (
             new_pdfs
         )
-
 
         project_data['pdf'] = (
 
@@ -2746,7 +2460,6 @@ def update_project(
             else ''
 
         )
-
 
     except ValueError as e:
 
@@ -2760,7 +2473,6 @@ def update_project(
 
         }), 400
 
-
     # =====================================================
     # UPDATE INFORMATION
     # =====================================================
@@ -2771,11 +2483,9 @@ def update_project(
             current_user['_id']
         )
 
-
         project_data['modified_at'] = (
             datetime.now()
         )
-
 
         result = db.projects.update_one(
 
@@ -2790,7 +2500,6 @@ def update_project(
             }
         )
 
-
         if result.matched_count == 0:
 
             return jsonify({
@@ -2802,7 +2511,6 @@ def update_project(
                     False
 
             }), 404
-
 
         response = {
 
@@ -2817,16 +2525,13 @@ def update_project(
 
         }
 
-
         if errors:
 
             response["warnings"] = errors
 
-
         return jsonify(
             response
         ), 200
-
 
     except Exception as e:
 
@@ -2859,7 +2564,6 @@ def delete_project(
         request.tenant_id
     )
 
-
     try:
 
         project = db.projects.find_one({
@@ -2867,7 +2571,6 @@ def delete_project(
             "_id":
                 ObjectId(id)
         })
-
 
         if not project:
 
@@ -2881,11 +2584,9 @@ def delete_project(
 
             }), 404
 
-
         project_images_id = project.get(
             'projectImagesId'
         )
-
 
         if project_images_id:
 
@@ -2893,18 +2594,15 @@ def delete_project(
                 f"projects/{project_images_id}"
             )
 
-
             delete_media_prefix(
                 prefix
             )
-
 
         result = db.projects.delete_one({
 
             "_id":
                 ObjectId(id)
         })
-
 
         if result.deleted_count == 0:
 
@@ -2918,7 +2616,6 @@ def delete_project(
 
             }), 404
 
-
         return jsonify({
 
             "message":
@@ -2928,7 +2625,6 @@ def delete_project(
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -2957,89 +2653,65 @@ def get_projects():
         request.tenant_id
     )
 
-
     try:
 
         documents = list(
             db.projects.find()
         )
 
-
-        print(
-            "got all projects here ",
-            documents
-        )
-
-
         results = []
-
 
         for doc in documents:
 
             k = {}
 
-
             k['id'] = str(
                 doc['_id']
             )
 
-
             k['_id'] = str(
                 doc['_id']
             )
-
 
             k['name'] = doc.get(
                 'name',
                 ''
             )
 
-
             k['title'] = doc.get(
                 'title',
                 ''
             )
-
 
             k['start'] = doc.get(
                 'start',
                 ''
             )
 
-
             k['end'] = doc.get(
                 'end',
                 ''
             )
-
 
             k['address'] = doc.get(
                 'address',
                 ''
             )
 
-
             k['description'] = doc.get(
                 'description',
                 ''
             )
-
 
             k['images'] = doc.get(
                 'images',
                 []
             )
 
-
             k['projectImagesId'] = doc.get(
                 'projectImagesId',
                 ''
             )
-
-
-            # -------------------------------------------------
-            # MULTIPLE PDFs
-            # -------------------------------------------------
 
             try:
 
@@ -3051,11 +2723,9 @@ def get_projects():
 
                 project_pdfs = []
 
-
             k['pdfs'] = (
                 project_pdfs
             )
-
 
             k['pdf'] = (
 
@@ -3067,9 +2737,7 @@ def get_projects():
 
             )
 
-
             results.append(k)
-
 
         return jsonify({
 
@@ -3080,7 +2748,6 @@ def get_projects():
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -3111,7 +2778,6 @@ def get_project_by_id(
         request.tenant_id
     )
 
-
     try:
 
         project = db.projects.find_one({
@@ -3119,7 +2785,6 @@ def get_project_by_id(
             "_id":
                 ObjectId(project_id)
         })
-
 
         if not project:
 
@@ -3133,20 +2798,13 @@ def get_project_by_id(
 
             }), 404
 
-
-        # -------------------------------------------------
-        # CONVERT OBJECT IDS / DATES
-        # -------------------------------------------------
-
         project['id'] = str(
             project['_id']
         )
 
-
         project['_id'] = str(
             project['_id']
         )
-
 
         if project.get(
             'created_by'
@@ -3156,7 +2814,6 @@ def get_project_by_id(
                 project['created_by']
             )
 
-
         if project.get(
             'created_at'
         ):
@@ -3165,14 +2822,12 @@ def get_project_by_id(
                 project['created_at']
             )
 
-
         project['modified_by'] = str(
             project.get(
                 'modified_by',
                 ''
             )
         )
-
 
         if project.get(
             'modified_at'
@@ -3181,11 +2836,6 @@ def get_project_by_id(
             project['modified_at'] = str(
                 project['modified_at']
             )
-
-
-        # -------------------------------------------------
-        # MULTIPLE PDFs
-        # -------------------------------------------------
 
         try:
 
@@ -3197,11 +2847,9 @@ def get_project_by_id(
 
             project_pdfs = []
 
-
         project['pdfs'] = (
             project_pdfs
         )
-
 
         project['pdf'] = (
 
@@ -3213,7 +2861,6 @@ def get_project_by_id(
 
         )
 
-
         return jsonify({
 
             "project":
@@ -3223,7 +2870,6 @@ def get_project_by_id(
                 True
 
         }), 200
-
 
     except Exception as e:
 
@@ -3249,14 +2895,12 @@ if __name__ == "__main__":
         '127.0.0.1'
     )
 
-
     port = int(
         os.getenv(
             'PORT',
             '5001'
         )
     )
-
 
     debug = os.getenv(
         'FLASK_DEBUG',
@@ -3266,7 +2910,6 @@ if __name__ == "__main__":
         'true',
         'yes'
     }
-
 
     app.run(
         host=host,
