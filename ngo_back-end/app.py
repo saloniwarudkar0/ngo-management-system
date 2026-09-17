@@ -109,6 +109,14 @@ with tenants_config_path.open() as f:
 def get_db(tenant_id):
     """
     Get a database connection for a given tenant.
+
+    LOCAL:
+        Uses tenants_config.json
+
+    RENDER / PRODUCTION:
+        Uses MONGODB_URI environment variable.
+
+    This keeps the MongoDB Atlas password out of GitHub.
     """
 
     tenant_config = tenants_config.get(tenant_id)
@@ -116,14 +124,48 @@ def get_db(tenant_id):
     if not tenant_config:
         raise ValueError("Invalid tenant ID")
 
-    connection_uri = tenant_config['connection_uri']
-    db_name = tenant_config['db_name']
+    # -----------------------------------------------------
+    # DATABASE CONNECTION URI
+    # -----------------------------------------------------
+    #
+    # If MONGODB_URI exists, use it.
+    # This is what Render will use for MongoDB Atlas.
+    #
+    # Otherwise, use the local URI from tenants_config.json.
+    #
+
+    connection_uri = os.getenv(
+        'MONGODB_URI'
+    )
+
+    if not connection_uri:
+        connection_uri = tenant_config['connection_uri']
+
+    # -----------------------------------------------------
+    # DATABASE NAME
+    # -----------------------------------------------------
+    #
+    # By default the application uses the "localhost"
+    # database name, matching the existing local setup.
+    #
+    # MONGODB_DB_NAME can be added in Render later if
+    # a different database name is required.
+    #
+
+    db_name = os.getenv(
+        'MONGODB_DB_NAME',
+        tenant_config['db_name']
+    )
+
+    # -----------------------------------------------------
+    # CREATE CONNECTION
+    # -----------------------------------------------------
 
     if 'db' not in g:
 
         client = MongoClient(
             connection_uri,
-            serverSelectionTimeoutMS=3000
+            serverSelectionTimeoutMS=5000
         )
 
         g.db = client[db_name]
