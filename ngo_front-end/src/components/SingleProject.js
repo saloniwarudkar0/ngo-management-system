@@ -45,6 +45,8 @@ function SingleProject({ project, setToggleReload, toggleReload }) {
             className='h-full w-full object-cover transition duration-500 group-hover:scale-105'
             src={image}
             alt={project?.name || 'Water restoration project'}
+            loading='lazy'
+            decoding='async'
             onError={(event) => {
               event.currentTarget.onerror = null
               event.currentTarget.src = '/blank_scenary.png'
