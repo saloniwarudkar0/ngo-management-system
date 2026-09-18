@@ -7,15 +7,9 @@ function SingleProject({ project, setToggleReload, toggleReload }) {
 
   const description = project?.description || ''
 
-  const originalImage = project?.images?.[0] || '/blank_scenary.png'
-
-  // Optimize Cloudinary image specifically for the project card
-  const image = originalImage.includes('res.cloudinary.com')
-    ? originalImage.replace(
-        /\/(c_limit,)?f_auto,q_auto,w_1200\//,
-        '/c_limit,f_auto,q_auto,w_600/'
-      )
-    : originalImage
+  // Use the Cloudinary URL directly from the backend.
+  // Do not modify the URL on the frontend.
+  const image = project?.images?.[0] || '/blank_scenary.png'
 
   const hasDateRange =
     project?.start &&
