@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react'
+
 import Modal from './Modal/Modal'
 import Input from './utilities/Input'
 import Card from './utilities/Card'
@@ -8,17 +9,21 @@ import TextArea from './utilities/TextArea'
 import moment from 'moment/moment'
 import ImageInputPills from './utilities/ImageInputPills'
 import { v4 as uuidv4 } from 'uuid'
+
 import {
     ensureUrlSafety,
     getExtension,
     removeQueryParameters
 } from './utilities/utilityFunctions'
+
 import { getPresignedUrl } from '../Actions/UploadFilesActions'
+
 import {
     getProjectById,
     createProject,
     updateProject
 } from '../Actions/projectActions'
+
 import { toast } from 'react-hot-toast'
 
 function CreateProject(props) {
@@ -130,17 +135,12 @@ function CreateProject(props) {
 
                 let oldPdfs = []
 
-                // New format
                 if (Array.isArray(project.pdfs)) {
                     oldPdfs = project.pdfs.filter(Boolean)
-                }
-
-                // Old single-PDF format
-                else if (project.pdf) {
+                } else if (project.pdf) {
                     oldPdfs = [project.pdf]
                 }
 
-                // Maximum 3 PDFs
                 oldPdfs = oldPdfs.slice(0, 3)
 
                 setExistingPdfs(oldPdfs)
@@ -165,6 +165,11 @@ function CreateProject(props) {
 
     // =====================================================
     // UPLOAD FILE
+    // IMPORTANT:
+    // Backend uploads file to Cloudinary and returns:
+    // { url: "https://res.cloudinary.com/..." }
+    //
+    // We return that direct Cloudinary URL.
     // =====================================================
 
     const uploadFile = async (file, url) => {
@@ -174,9 +179,39 @@ function CreateProject(props) {
                 body: file
             })
 
-            return res
+            if (!res.ok) {
+                console.error(
+                    'File upload failed:',
+                    res.status,
+                    res.statusText
+                )
+
+                return null
+            }
+
+            // Backend returns JSON containing direct Cloudinary URL
+            const data = await res.json()
+
+            console.log('Cloudinary upload response:', data)
+
+            if (data?.url) {
+                return {
+                    response: res,
+                    url: data.url
+                }
+            }
+
+            console.error(
+                'Upload succeeded but no final URL was returned.'
+            )
+
+            return null
         } catch (error) {
-            console.error('File upload error:', error)
+            console.error(
+                'File upload error:',
+                error
+            )
+
             return null
         }
     }
@@ -231,7 +266,6 @@ function CreateProject(props) {
                 projectName
             )
 
-        // Unique ID prevents PDF overwrite
         const uniqueId = uuidv4()
 
         const key =
@@ -253,26 +287,31 @@ function CreateProject(props) {
             )
         }
 
-        const uploadResponse =
+        const uploadResult =
             await uploadFile(
                 pdf,
                 tempUrl.url
             )
 
         if (
-            !uploadResponse ||
-            !(
-                uploadResponse.status === 200 ||
-                uploadResponse.ok
-            )
+            !uploadResult ||
+            !uploadResult.url
         ) {
             throw new Error(
                 `Failed to upload PDF ${pdf.name}`
             )
         }
 
+        console.log(
+            'Final Cloudinary PDF URL:',
+            uploadResult.url
+        )
+
+        // IMPORTANT:
+        // Save direct Cloudinary URL,
+        // NOT backend /api/local-files URL.
         return removeQueryParameters(
-            tempUrl.url
+            uploadResult.url
         )
     }
 
@@ -343,32 +382,36 @@ function CreateProject(props) {
                             )
                         }
 
-                        const uploadResponse =
+                        const uploadResult =
                             await uploadFile(
                                 file.file,
                                 tempUrl.url
                             )
 
                         if (
-                            uploadResponse &&
-                            (
-                                uploadResponse.status === 200 ||
-                                uploadResponse.ok
-                            )
+                            !uploadResult ||
+                            !uploadResult.url
                         ) {
-                            const fileUrl =
-                                removeQueryParameters(
-                                    tempUrl.url
-                                )
-
-                            imagesUrl.push(
-                                fileUrl
-                            )
-                        } else {
                             throw new Error(
                                 `Failed to upload image ${file.name}`
                             )
                         }
+
+                        // IMPORTANT:
+                        // Save direct Cloudinary URL
+                        const fileUrl =
+                            removeQueryParameters(
+                                uploadResult.url
+                            )
+
+                        console.log(
+                            'Final Cloudinary image URL:',
+                            fileUrl
+                        )
+
+                        imagesUrl.push(
+                            fileUrl
+                        )
                     })
                 )
 
@@ -408,10 +451,14 @@ function CreateProject(props) {
                     end: projectEndDate,
                     address: address,
                     description: description,
-                    images: imagesUrl,
-                    projectImagesId: projectImageId,
 
-                    // Maximum 3 PDFs
+                    // Direct Cloudinary image URLs
+                    images: imagesUrl,
+
+                    projectImagesId:
+                        projectImageId,
+
+                    // Direct Cloudinary PDF URLs
                     pdfs: uploadedPdfResults
                 }
 
@@ -495,32 +542,36 @@ function CreateProject(props) {
                             )
                         }
 
-                        const uploadResponse =
+                        const uploadResult =
                             await uploadFile(
                                 file.file,
                                 tempUrl.url
                             )
 
                         if (
-                            uploadResponse &&
-                            (
-                                uploadResponse.status === 200 ||
-                                uploadResponse.ok
-                            )
+                            !uploadResult ||
+                            !uploadResult.url
                         ) {
-                            const fileUrl =
-                                removeQueryParameters(
-                                    tempUrl.url
-                                )
-
-                            imagesUrl.push(
-                                fileUrl
-                            )
-                        } else {
                             throw new Error(
                                 `Failed to upload image ${file.name}`
                             )
                         }
+
+                        // IMPORTANT:
+                        // Direct Cloudinary URL
+                        const fileUrl =
+                            removeQueryParameters(
+                                uploadResult.url
+                            )
+
+                        console.log(
+                            'New Cloudinary image URL:',
+                            fileUrl
+                        )
+
+                        imagesUrl.push(
+                            fileUrl
+                        )
                     })
                 )
 
@@ -589,10 +640,14 @@ function CreateProject(props) {
                     end: projectEndDate,
                     address: address,
                     description: description,
-                    images: imagesUrl,
-                    projectImagesId: projectImageId,
 
-                    // Maximum 3 PDFs
+                    // Existing + new direct Cloudinary URLs
+                    images: imagesUrl,
+
+                    projectImagesId:
+                        projectImageId,
+
+                    // Existing + new direct Cloudinary URLs
                     pdfs: finalPdfs,
 
                     // Images to delete
@@ -759,12 +814,10 @@ function CreateProject(props) {
             return
         }
 
-        // Current PDF count
         const currentPdfCount =
             existingPdfs.length +
             pdfFiles.length
 
-        // Available slots
         const availableSlots =
             3 -
             currentPdfCount
@@ -782,7 +835,6 @@ function CreateProject(props) {
             return
         }
 
-        // Only take available number of files
         const filesToCheck =
             selectedFiles.slice(
                 0,
@@ -805,7 +857,6 @@ function CreateProject(props) {
             const selectedFile
             of filesToCheck
         ) {
-            // Check PDF
             const isPdf =
                 selectedFile.type ===
                     'application/pdf' ||
@@ -822,7 +873,6 @@ function CreateProject(props) {
                 continue
             }
 
-            // Maximum 10 MB
             const maxSize =
                 10 *
                 1024 *
@@ -852,7 +902,6 @@ function CreateProject(props) {
             ]
         )
 
-        // Reset input
         e.target.value = ''
     }
 
@@ -1171,9 +1220,7 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="mt-5 w-full">
-
                             <div className="flex items-center justify-between mb-2">
-
                                 <label className="block text-sm font-medium text-gray-700">
                                     Project PDFs
                                 </label>
@@ -1181,7 +1228,6 @@ function CreateProject(props) {
                                 <span className="text-xs font-semibold text-gray-500">
                                     {totalPdfCount}/3
                                 </span>
-
                             </div>
 
                             <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
@@ -1200,13 +1246,15 @@ function CreateProject(props) {
                                         loading ||
                                         totalPdfCount >= 3
                                     }
-                                    className="block w-full text-sm text-gray-700
-                                    file:mr-4 file:py-2 file:px-4
-                                    file:rounded-md file:border-0
-                                    file:text-sm file:font-semibold
-                                    file:bg-blue-50 file:text-blue-700
-                                    hover:file:bg-blue-100
-                                    disabled:opacity-50"
+                                    className="
+                                        block w-full text-sm text-gray-700
+                                        file:mr-4 file:py-2 file:px-4
+                                        file:rounded-md file:border-0
+                                        file:text-sm file:font-semibold
+                                        file:bg-blue-50 file:text-blue-700
+                                        hover:file:bg-blue-100
+                                        disabled:opacity-50
+                                    "
                                 />
 
                                 <p className="text-xs text-gray-500 mt-2">
@@ -1238,7 +1286,6 @@ function CreateProject(props) {
 
                                 {existingPdfs.length > 0 && (
                                     <div className="mt-4">
-
                                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
                                             Existing PDFs
                                         </p>
@@ -1252,15 +1299,12 @@ function CreateProject(props) {
                                                     key={`existing-${index}-${pdf}`}
                                                     className="mt-2 flex items-center justify-between bg-white border rounded-md p-3"
                                                 >
-
                                                     <div className="flex items-center gap-2 min-w-0">
-
                                                         <span className="text-red-500 text-lg shrink-0">
                                                             📄
                                                         </span>
 
                                                         <div className="min-w-0">
-
                                                             <p className="text-sm font-medium text-gray-700">
                                                                 Project PDF {index + 1}
                                                             </p>
@@ -1273,9 +1317,7 @@ function CreateProject(props) {
                                                             >
                                                                 View PDF
                                                             </a>
-
                                                         </div>
-
                                                     </div>
 
                                                     {mode === 'Edit' && (
@@ -1291,11 +1333,9 @@ function CreateProject(props) {
                                                             Remove
                                                         </button>
                                                     )}
-
                                                 </div>
                                             )
                                         )}
-
                                     </div>
                                 )}
 
@@ -1305,7 +1345,6 @@ function CreateProject(props) {
 
                                 {pdfFiles.length > 0 && (
                                     <div className="mt-4">
-
                                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
                                             New PDFs
                                         </p>
@@ -1319,15 +1358,12 @@ function CreateProject(props) {
                                                     key={`new-${index}-${pdf.name}`}
                                                     className="mt-2 flex items-center justify-between bg-white border rounded-md p-3"
                                                 >
-
                                                     <div className="flex items-center gap-2 min-w-0">
-
                                                         <span className="text-red-500 text-lg shrink-0">
                                                             📄
                                                         </span>
 
                                                         <div className="min-w-0">
-
                                                             <p className="text-sm font-medium text-gray-700 truncate max-w-[220px]">
                                                                 {pdf.name}
                                                             </p>
@@ -1345,9 +1381,7 @@ function CreateProject(props) {
                                                                     )
                                                                 } MB
                                                             </p>
-
                                                         </div>
-
                                                     </div>
 
                                                     <button
@@ -1361,14 +1395,11 @@ function CreateProject(props) {
                                                     >
                                                         Remove
                                                     </button>
-
                                                 </div>
                                             )
                                         )}
-
                                     </div>
                                 )}
-
                             </div>
                         </div>
 
@@ -1387,7 +1418,6 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="flex justify-center mt-5">
-
                             {mode === 'view'
                                 ? ''
                                 : (
@@ -1405,9 +1435,7 @@ function CreateProject(props) {
                                         }
                                     </button>
                                 )}
-
                         </div>
-
                     </form>
                 )}
             </Card>
@@ -1416,3 +1444,4 @@ function CreateProject(props) {
 }
 
 export default CreateProject
+

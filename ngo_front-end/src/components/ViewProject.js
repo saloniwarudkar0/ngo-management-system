@@ -9,6 +9,7 @@ import { ContextApp } from '../ContextAPI'
 function ViewProject(props) {
   const {
     projectId,
+    projectData,
     onClose,
     toggleReload,
     setToggleReload
@@ -70,6 +71,10 @@ function ViewProject(props) {
               setEditMode={setEditMode}
               projectId={projectId}
               setDeleteMode={setDeleteMode}
+
+              // Already available from Projects page
+              // Prevents another API request
+              projectData={projectData}
             />
 
           ) : (

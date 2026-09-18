@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useContext } from 'react'
-import { getProjectById } from '../Actions/projectActions'
 import Carousel from './carousel'
 import HandHoldingPencil from '../Icons/HandHoldingPencil'
 import { DeleteIcon } from '../Icons/DeleteIcon'
@@ -11,7 +10,8 @@ function Project(props) {
     setOpenModal,
     setEditMode,
     projectId,
-    setDeleteMode
+    setDeleteMode,
+    projectData
   } = props
 
   const {
@@ -19,45 +19,39 @@ function Project(props) {
   } = useContext(ContextApp)
 
   const [projectName, setprojectName] = useState('')
-  const [startDate, setStartDate] = useState()
-  const [endDate, setEndDate] = useState()
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [description, setDescription] = useState('')
   const [address, setAddress] = useState('')
   const [images, setImages] = useState([])
-  const [loading, setLoading] = useState(true)
 
+  /*
+    ProjectDetails already fetches the project data.
+    We use that data directly here instead of making
+    another getProjectById API request.
+  */
   useEffect(() => {
-    getSingleProjectById()
-  }, [projectId])
-
-  const getSingleProjectById = async () => {
-    try {
-      setLoading(true)
-
-      const res = await getProjectById(projectId)
-
-      console.log('PROJECT DETAILS RESPONSE:', res)
-
-      if (res?.status) {
-        const project = res?.project || {}
-
-        console.log('PROJECT DATA:', project)
-
-        setprojectName(project?.name || '')
-        setStartDate(project?.start || '')
-        setEndDate(project?.end || '')
-        setDescription(project?.description || '')
-        setAddress(project?.address || '')
-        setImages(project?.images || [])
-      } else {
-        console.log('Unable to get project details')
-      }
-    } catch (error) {
-      console.error('Error while getting project:', error)
-    } finally {
-      setLoading(false)
+    if (!projectData) {
+      setprojectName('')
+      setStartDate('')
+      setEndDate('')
+      setDescription('')
+      setAddress('')
+      setImages([])
+      return
     }
-  }
+
+    setprojectName(projectData?.name || projectData?.title || '')
+    setStartDate(projectData?.start || '')
+    setEndDate(projectData?.end || '')
+    setDescription(projectData?.description || '')
+    setAddress(projectData?.address || '')
+    setImages(
+      Array.isArray(projectData?.images)
+        ? projectData.images.filter(Boolean)
+        : []
+    )
+  }, [projectData])
 
   return (
     <div className='w-full'>

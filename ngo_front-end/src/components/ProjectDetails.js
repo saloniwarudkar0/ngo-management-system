@@ -1,70 +1,139 @@
 import React, { useEffect, useState } from 'react'
+
 import CloseIcon from '../Icons/CloseIcon'
+
 import Project from './Project'
+
 import { getProjectById } from '../Actions/projectActions'
 
 function ProjectDetails(props) {
+
   const {
     onClose,
-    projectId,
     setEditMode,
-    setDeleteMode
+    setDeleteMode,
+    projectId,
+    projectData
   } = props
 
-  const [projectPdfs, setProjectPdfs] = useState([])
-  const [loadingPdfs, setLoadingPdfs] = useState(true)
+  const [project, setProject] = useState(projectData || null)
+
+  const [loading, setLoading] = useState(!projectData)
+
+  const [error, setError] = useState(false)
+
+  /*
+   * =========================================
+   * PROJECT DATA
+   * =========================================
+   *
+   * If projectData is already available from
+   * the Projects page, use it directly.
+   *
+   * This avoids another API request when
+   * opening the View Project modal.
+   *
+   * If projectData is not available, then
+   * fallback to getProjectById().
+   */
 
   useEffect(() => {
-    getProjectPdfs()
-  }, [projectId])
 
-  const getProjectPdfs = async () => {
+    if (projectData) {
+
+      setProject(projectData)
+
+      setLoading(false)
+
+      setError(false)
+
+      return
+
+    }
+
+    if (!projectId) {
+
+      setProject(null)
+
+      setLoading(false)
+
+      setError(true)
+
+      return
+
+    }
+
+    getProjectDetails()
+
+  }, [projectData, projectId])
+
+  /*
+   * =========================================
+   * FALLBACK API CALL
+   * =========================================
+   */
+
+  const getProjectDetails = async () => {
+
     try {
-      setLoadingPdfs(true)
+
+      setLoading(true)
+
+      setError(false)
 
       const res = await getProjectById(projectId)
 
       console.log('PROJECT DETAILS RESPONSE:', res)
 
-      if (res?.status) {
-        const project = res?.project || {}
+      if (res?.status && res?.project) {
 
-        console.log('PROJECT PDFS:', project?.pdfs)
-        console.log('PROJECT OLD PDF:', project?.pdf)
+        setProject(res.project)
 
-        let pdfList = []
-
-        if (Array.isArray(project?.pdfs)) {
-          pdfList = project.pdfs.filter(Boolean)
-        } else if (project?.pdf) {
-          pdfList = [project.pdf]
-        } else if (project?.projectPdf) {
-          pdfList = [project.projectPdf]
-        } else if (project?.pdfUrl) {
-          pdfList = [project.pdfUrl]
-        }
-
-        pdfList = pdfList.slice(0, 3)
-
-        setProjectPdfs(pdfList)
       } else {
-        setProjectPdfs([])
+
+        setProject(null)
+
+        setError(true)
+
       }
-    } catch (error) {
-      console.error('Error while getting project PDFs:', error)
-      setProjectPdfs([])
+
+    } catch (err) {
+
+      console.error(
+        'Error while getting project details:',
+        err
+      )
+
+      setProject(null)
+
+      setError(true)
+
     } finally {
-      setLoadingPdfs(false)
+
+      setLoading(false)
+
     }
+
   }
 
+  /*
+   * =========================================
+   * PDF NAME
+   * =========================================
+   */
+
   const getPdfName = (pdf, index) => {
+
     try {
+
       const url = new URL(pdf)
+
       const pathname = url.pathname
+
       const fileName = pathname.split('/').pop()
 
       if (fileName) {
+
         const decodedName = decodeURIComponent(fileName)
 
         const cleanName = decodedName
@@ -74,18 +143,68 @@ function ProjectDetails(props) {
           .trim()
 
         if (cleanName) {
+
           return `${cleanName}.pdf`
+
         }
+
       }
-    } catch (error) {
-      console.log('Unable to read PDF filename:', error)
+
+    } catch (err) {
+
+      console.log(
+        'Unable to read PDF filename:',
+        err
+      )
+
     }
 
     return `Project Document ${index + 1}.pdf`
+
   }
 
+  /*
+   * =========================================
+   * PROJECT PDF LIST
+   * =========================================
+   */
+
+  const projectPdfs = (() => {
+
+    if (!project) {
+
+      return []
+
+    }
+
+    let pdfList = []
+
+    if (Array.isArray(project.pdfs)) {
+
+      pdfList = project.pdfs.filter(Boolean)
+
+    } else if (project.pdf) {
+
+      pdfList = [project.pdf]
+
+    } else if (project.projectPdf) {
+
+      pdfList = [project.projectPdf]
+
+    } else if (project.pdfUrl) {
+
+      pdfList = [project.pdfUrl]
+
+    }
+
+    return pdfList.slice(0, 3)
+
+  })()
+
   return (
+
     <>
+
       <style>{`
 
         /* ================================
@@ -93,8 +212,11 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-details-wrapper {
+
           width: 100%;
+
           max-height: 92vh;
+
           overflow-y: auto;
 
           background: #ffffff;
@@ -106,20 +228,29 @@ function ProjectDetails(props) {
             0 8px 25px rgba(15, 23, 42, 0.08);
 
           scrollbar-width: thin;
+
           scrollbar-color: #cbd5e1 transparent;
+
         }
 
         .project-details-wrapper::-webkit-scrollbar {
+
           width: 7px;
+
         }
 
         .project-details-wrapper::-webkit-scrollbar-track {
+
           background: transparent;
+
         }
 
         .project-details-wrapper::-webkit-scrollbar-thumb {
+
           background: #cbd5e1;
+
           border-radius: 20px;
+
         }
 
 
@@ -128,14 +259,19 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-details-header {
+
           position: sticky;
+
           top: 0;
+
           z-index: 30;
 
           min-height: 76px;
 
           display: flex;
+
           align-items: center;
+
           justify-content: space-between;
 
           padding: 16px 22px;
@@ -145,20 +281,29 @@ function ProjectDetails(props) {
           backdrop-filter: blur(14px);
 
           border-bottom: 1px solid #e2e8f0;
+
         }
 
         .project-details-header-left {
+
           display: flex;
+
           align-items: center;
+
           gap: 13px;
+
         }
 
         .project-details-header-icon {
+
           width: 42px;
+
           height: 42px;
 
           display: flex;
+
           align-items: center;
+
           justify-content: center;
 
           border-radius: 13px;
@@ -168,9 +313,11 @@ function ProjectDetails(props) {
           color: #1b7f5a;
 
           font-size: 20px;
+
         }
 
         .project-details-title {
+
           margin: 0;
 
           font-size: 18px;
@@ -180,22 +327,29 @@ function ProjectDetails(props) {
           font-weight: 700;
 
           color: #0f172a;
+
         }
 
         .project-details-subtitle {
+
           margin: 4px 0 0;
 
           font-size: 12px;
 
           color: #64748b;
+
         }
 
         .project-details-close {
+
           width: 40px;
+
           height: 40px;
 
           display: flex;
+
           align-items: center;
+
           justify-content: center;
 
           border-radius: 50%;
@@ -209,14 +363,17 @@ function ProjectDetails(props) {
           border: 1px solid #e2e8f0;
 
           transition: all 0.2s ease;
+
         }
 
         .project-details-close:hover {
+
           background: #f1f5f9;
 
           color: #0f172a;
 
           transform: rotate(4deg);
+
         }
 
 
@@ -225,12 +382,15 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-main-section {
+
           padding: 4px 18px 0;
 
           background: #f8fafc;
+
         }
 
         .project-main-card {
+
           overflow: hidden;
 
           border-radius: 18px;
@@ -241,6 +401,7 @@ function ProjectDetails(props) {
 
           box-shadow:
             0 8px 25px rgba(15, 23, 42, 0.05);
+
         }
 
 
@@ -249,14 +410,17 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-document-section {
+
           padding: 4px 22px 22px;
 
           background: #ffffff;
 
           border-top: 1px solid #e2e8f0;
+
         }
 
         .project-document-heading {
+
           display: flex;
 
           align-items: center;
@@ -266,18 +430,23 @@ function ProjectDetails(props) {
           gap: 12px;
 
           margin-bottom: 8px;
+
         }
 
         .project-document-heading-left {
+
           display: flex;
 
           align-items: center;
 
           gap: 11px;
+
         }
 
         .project-document-icon {
+
           width: 42px;
+
           height: 42px;
 
           display: flex;
@@ -293,9 +462,11 @@ function ProjectDetails(props) {
           color: #dc2626;
 
           font-size: 20px;
+
         }
 
         .project-document-title {
+
           margin: 0;
 
           font-size: 16px;
@@ -303,17 +474,21 @@ function ProjectDetails(props) {
           font-weight: 700;
 
           color: #0f172a;
+
         }
 
         .project-document-description {
+
           margin: 3px 0 0;
 
           font-size: 12px;
 
           color: #64748b;
+
         }
 
         .project-document-count {
+
           padding: 5px 10px;
 
           border-radius: 999px;
@@ -327,6 +502,7 @@ function ProjectDetails(props) {
           font-weight: 600;
 
           white-space: nowrap;
+
         }
 
 
@@ -335,14 +511,17 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-document-list {
+
           display: flex;
 
           flex-direction: column;
 
           gap: 6px;
+
         }
 
         .project-document-card {
+
           display: flex;
 
           align-items: center;
@@ -360,9 +539,11 @@ function ProjectDetails(props) {
           background: #f8fafc;
 
           transition: all 0.2s ease;
+
         }
 
         .project-document-card:hover {
+
           border-color: #b7dccb;
 
           background: #f9fdfb;
@@ -371,9 +552,11 @@ function ProjectDetails(props) {
 
           box-shadow:
             0 5px 16px rgba(27, 127, 90, 0.06);
+
         }
 
         .project-document-info {
+
           min-width: 0;
 
           display: flex;
@@ -381,10 +564,13 @@ function ProjectDetails(props) {
           align-items: center;
 
           gap: 12px;
+
         }
 
         .project-pdf-icon {
+
           width: 42px;
+
           height: 42px;
 
           flex-shrink: 0;
@@ -402,9 +588,11 @@ function ProjectDetails(props) {
           border: 1px solid #fecdd3;
 
           font-size: 19px;
+
         }
 
         .project-pdf-name {
+
           margin: 0;
 
           overflow: hidden;
@@ -418,14 +606,17 @@ function ProjectDetails(props) {
           font-weight: 650;
 
           color: #334155;
+
         }
 
         .project-pdf-type {
+
           margin: 4px 0 0;
 
           font-size: 11px;
 
           color: #94a3b8;
+
         }
 
 
@@ -434,6 +625,7 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-document-actions {
+
           display: flex;
 
           flex-shrink: 0;
@@ -441,10 +633,12 @@ function ProjectDetails(props) {
           align-items: center;
 
           gap: 8px;
+
         }
 
         .project-pdf-view,
         .project-pdf-download {
+
           min-height: 36px;
 
           display: inline-flex;
@@ -464,38 +658,47 @@ function ProjectDetails(props) {
           text-decoration: none;
 
           transition: all 0.2s ease;
+
         }
 
         .project-pdf-view {
+
           color: #1b7f5a;
 
           background: #ffffff;
 
           border: 1px solid #b7dccb;
+
         }
 
         .project-pdf-view:hover {
+
           color: #ffffff;
 
           background: #1b7f5a;
 
           border-color: #1b7f5a;
+
         }
 
         .project-pdf-download {
+
           color: #ffffff;
 
           background: #1b7f5a;
 
           border: 1px solid #1b7f5a;
+
         }
 
         .project-pdf-download:hover {
+
           background: #166b4c;
 
           border-color: #166b4c;
 
           transform: translateY(-1px);
+
         }
 
 
@@ -504,6 +707,7 @@ function ProjectDetails(props) {
         ================================= */
 
         .project-document-loading {
+
           padding: 8px;
 
           text-align: center;
@@ -511,6 +715,39 @@ function ProjectDetails(props) {
           color: #94a3b8;
 
           font-size: 13px;
+
+        }
+
+        .project-details-loading {
+
+          min-height: 250px;
+
+          display: flex;
+
+          align-items: center;
+
+          justify-content: center;
+
+          color: #64748b;
+
+          font-size: 14px;
+
+        }
+
+        .project-details-error {
+
+          min-height: 250px;
+
+          display: flex;
+
+          align-items: center;
+
+          justify-content: center;
+
+          color: #dc2626;
+
+          font-size: 14px;
+
         }
 
 
@@ -521,61 +758,86 @@ function ProjectDetails(props) {
         @media (max-width: 640px) {
 
           .project-details-wrapper {
+
             max-height: 95vh;
 
             border-radius: 17px;
+
           }
 
           .project-details-header {
+
             min-height: 68px;
 
             padding: 13px 15px;
+
           }
 
           .project-details-header-icon {
+
             width: 37px;
+
             height: 37px;
 
             font-size: 17px;
+
           }
 
           .project-details-title {
+
             font-size: 16px;
+
           }
 
           .project-details-subtitle {
+
             font-size: 11px;
+
           }
 
           .project-main-section {
+
             padding: 3px 10px 0;
+
           }
 
           .project-document-section {
+
             padding: 4px 16px 16px;
+
           }
 
           .project-document-heading {
+
             align-items: flex-start;
+
           }
 
           .project-document-card {
+
             align-items: flex-start;
 
             flex-direction: column;
+
           }
 
           .project-document-actions {
+
             width: 100%;
+
           }
 
           .project-pdf-view,
           .project-pdf-download {
+
             flex: 1;
+
           }
 
           .project-pdf-name {
+
             max-width: 220px;
+
           }
 
         }
@@ -585,7 +847,9 @@ function ProjectDetails(props) {
 
       <div className='project-details-wrapper'>
 
+        {/* ========================================= */}
         {/* HEADER */}
+        {/* ========================================= */}
 
         <div className='project-details-header'>
 
@@ -622,149 +886,176 @@ function ProjectDetails(props) {
         </div>
 
 
-        {/* PROJECT INFORMATION */}
+        {/* ========================================= */}
+        {/* LOADING */}
+        {/* ========================================= */}
 
-        <div className='project-main-section'>
+        {loading && (
 
-          <div className='project-main-card'>
-
-            <Project
-              setOpenModal={onClose}
-              setEditMode={setEditMode}
-              projectId={projectId}
-              setDeleteMode={setDeleteMode}
-            />
-
+          <div className='project-details-loading'>
+            Loading project details...
           </div>
 
-        </div>
+        )}
 
 
-        {/* PROJECT PDFs */}
+        {/* ========================================= */}
+        {/* ERROR */}
+        {/* ========================================= */}
 
-        {!loadingPdfs && projectPdfs.length > 0 && (
+        {!loading && error && (
 
-          <div className='project-document-section'>
+          <div className='project-details-error'>
+            Unable to load project details.
+          </div>
 
-            <div className='project-document-heading'>
+        )}
 
-              <div className='project-document-heading-left'>
 
-                <div className='project-document-icon'>
-                  📄
+        {/* ========================================= */}
+        {/* PROJECT INFORMATION */}
+        {/* ========================================= */}
+
+        {!loading && !error && project && (
+
+          <>
+
+            <div className='project-main-section'>
+
+              <div className='project-main-card'>
+
+                <Project
+                  setOpenModal={onClose}
+                  setEditMode={setEditMode}
+                  projectId={projectId}
+                  setDeleteMode={setDeleteMode}
+                  projectData={project}
+                />
+
+              </div>
+
+            </div>
+
+
+            {/* ========================================= */}
+            {/* PROJECT PDFs */}
+            {/* ========================================= */}
+
+            {projectPdfs.length > 0 && (
+
+              <div className='project-document-section'>
+
+                <div className='project-document-heading'>
+
+                  <div className='project-document-heading-left'>
+
+                    <div className='project-document-icon'>
+                      📄
+                    </div>
+
+                    <div>
+
+                      <h3 className='project-document-title'>
+                        Project Documents
+                      </h3>
+
+                      <p className='project-document-description'>
+                        Reports and documents related to this project
+                      </p>
+
+                    </div>
+
+                  </div>
+
+
+                  <span className='project-document-count'>
+
+                    {projectPdfs.length}{' '}
+
+                    {projectPdfs.length === 1
+                      ? 'Document'
+                      : 'Documents'}
+
+                  </span>
+
                 </div>
 
-                <div>
 
-                  <h3 className='project-document-title'>
-                    Project Documents
-                  </h3>
+                <div className='project-document-list'>
 
-                  <p className='project-document-description'>
-                    Reports and documents related to this project
-                  </p>
+                  {projectPdfs.map((pdf, index) => (
+
+                    <div
+                      key={`${pdf}-${index}`}
+                      className='project-document-card'
+                    >
+
+                      {/* PDF INFORMATION */}
+
+                      <div className='project-document-info'>
+
+                        <div className='project-pdf-icon'>
+                          📕
+                        </div>
+
+                        <div className='min-w-0'>
+
+                          <p className='project-pdf-name'>
+                            {getPdfName(pdf, index)}
+                          </p>
+
+                          <p className='project-pdf-type'>
+                            PDF Project Report
+                          </p>
+
+                        </div>
+
+                      </div>
+
+
+                      {/* PDF ACTIONS */}
+
+                      <div className='project-document-actions'>
+
+                        <a
+                          href={pdf}
+                          target='_blank'
+                          rel='noopener noreferrer'
+                          className='project-pdf-view'
+                        >
+                          View PDF
+                        </a>
+
+                        <a
+                          href={pdf}
+                          download
+                          className='project-pdf-download'
+                        >
+                          Download
+                        </a>
+
+                      </div>
+
+                    </div>
+
+                  ))}
 
                 </div>
 
               </div>
 
+            )}
 
-              <span className='project-document-count'>
-
-                {projectPdfs.length}{' '}
-
-                {projectPdfs.length === 1
-                  ? 'Document'
-                  : 'Documents'}
-
-              </span>
-
-            </div>
-
-
-            <div className='project-document-list'>
-
-              {projectPdfs.map((pdf, index) => (
-
-                <div
-                  key={`${pdf}-${index}`}
-                  className='project-document-card'
-                >
-
-                  {/* PDF INFORMATION */}
-
-                  <div className='project-document-info'>
-
-                    <div className='project-pdf-icon'>
-                      📕
-                    </div>
-
-                    <div className='min-w-0'>
-
-                      <p className='project-pdf-name'>
-                        {getPdfName(pdf, index)}
-                      </p>
-
-                      <p className='project-pdf-type'>
-                        PDF Project Report
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  {/* PDF ACTIONS */}
-
-                  <div className='project-document-actions'>
-
-                    <a
-                      href={pdf}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='project-pdf-view'
-                    >
-                      View PDF
-                    </a>
-
-                    <a
-                      href={pdf}
-                      download
-                      className='project-pdf-download'
-                    >
-                      Download
-                    </a>
-
-                  </div>
-
-                </div>
-
-              ))}
-
-            </div>
-
-          </div>
-
-        )}
-
-
-        {/* PDF LOADING */}
-
-        {loadingPdfs && (
-
-          <div className='project-document-section'>
-
-            <div className='project-document-loading'>
-              Loading project documents...
-            </div>
-
-          </div>
+          </>
 
         )}
 
       </div>
+
     </>
+
   )
+
 }
 
 export default ProjectDetails
