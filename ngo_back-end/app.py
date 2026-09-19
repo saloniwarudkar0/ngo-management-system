@@ -169,20 +169,78 @@ with tenants_config_path.open() as f:
 
 def get_db(tenant_id):
 
-    tenant_config = tenants_config.get(tenant_id)
+    """
+    Production:
+        If MONGODB_URI exists, use MongoDB Atlas directly.
+        tenants_config.json is NOT required for production.
+
+    Local:
+        If MONGODB_URI does not exist, use tenants_config.json.
+    """
+
+    connection_uri = os.getenv(
+        "MONGODB_URI",
+        ""
+    ).strip()
+
+    # -----------------------------------------------------
+    # PRODUCTION / MONGODB ATLAS
+    # -----------------------------------------------------
+
+    if connection_uri:
+
+        db_name = os.getenv(
+            "MONGODB_DB_NAME",
+            ""
+        ).strip()
+
+        # Your existing production setup uses the
+        # localhost database name unless another database
+        # name is explicitly provided in Render.
+        if not db_name:
+
+            tenant_config = tenants_config.get(
+                tenant_id,
+                {}
+            )
+
+            db_name = tenant_config.get(
+                "db_name",
+                "localhost"
+            )
+
+        if "db" not in g:
+
+            client = MongoClient(
+                connection_uri,
+                serverSelectionTimeoutMS=5000
+            )
+
+            g.db = client[db_name]
+
+        return g.db
+
+    # -----------------------------------------------------
+    # LOCAL DEVELOPMENT
+    # -----------------------------------------------------
+
+    tenant_config = tenants_config.get(
+        tenant_id
+    )
 
     if not tenant_config:
-        raise ValueError("Invalid tenant ID")
 
-    connection_uri = os.getenv("MONGODB_URI")
+        raise ValueError(
+            "Invalid tenant ID"
+        )
 
-    if not connection_uri:
-        connection_uri = tenant_config["connection_uri"]
+    connection_uri = tenant_config[
+        "connection_uri"
+    ]
 
-    db_name = os.getenv(
-        "MONGODB_DB_NAME",
-        tenant_config["db_name"]
-    )
+    db_name = tenant_config[
+        "db_name"
+    ]
 
     if "db" not in g:
 
@@ -265,18 +323,56 @@ def set_tenant():
             "status": False
         }), 400
 
-    if os.getenv("MONGODB_URI"):
+    tenant_id = tenant_id.strip().lower()
+
+    # -----------------------------------------------------
+    # PRODUCTION
+    # -----------------------------------------------------
+    #
+    # When MONGODB_URI is configured on Render, the
+    # production Vercel hostname is accepted directly.
+    #
+    # This avoids depending on tenants_config.json for
+    # production.
+    # -----------------------------------------------------
+
+    connection_uri = os.getenv(
+        "MONGODB_URI",
+        ""
+    ).strip()
+
+    if connection_uri:
 
         production_tenants = {
             "localhost",
+            "127.0.0.1",
             "ngo-management-systemm.vercel.app"
         }
 
         if tenant_id in production_tenants:
 
-            request.tenant_id = "localhost"
+            request.tenant_id = (
+                "ngo-management-systemm.vercel.app"
+            )
 
             return
+
+        # Also allow a tenant that exists in the config
+        # when MONGODB_URI is configured.
+        if tenant_id in tenants_config:
+
+            request.tenant_id = tenant_id
+
+            return
+
+        return jsonify({
+            "error": "Invalid tenant ID",
+            "status": False
+        }), 400
+
+    # -----------------------------------------------------
+    # LOCAL DEVELOPMENT
+    # -----------------------------------------------------
 
     if tenant_id not in tenants_config:
 
@@ -295,9 +391,13 @@ def set_tenant():
 @app.teardown_appcontext
 def close_connection(exception):
 
-    db = g.pop("db", None)
+    db = g.pop(
+        "db",
+        None
+    )
 
     if db is not None:
+
         db.client.close()
 
 
@@ -314,28 +414,57 @@ def health():
     tenant_id = request.headers.get(
         "x-tenant-id",
         "localhost"
-    )
-
-    if tenant_id not in tenants_config:
-
-        return jsonify({
-            "error": "Invalid tenant ID",
-            "status": False
-        }), 400
+    ).strip().lower()
 
     try:
 
-        get_db(
-            tenant_id
-        ).command("ping")
+        # -------------------------------------------------
+        # PRODUCTION
+        # -------------------------------------------------
+
+        if os.getenv(
+            "MONGODB_URI",
+            ""
+        ).strip():
+
+            db = get_db(
+                tenant_id
+            )
+
+        # -------------------------------------------------
+        # LOCAL
+        # -------------------------------------------------
+
+        else:
+
+            if tenant_id not in tenants_config:
+
+                return jsonify({
+                    "error":
+                        "Invalid tenant ID",
+                    "status":
+                        False
+                }), 400
+
+            db = get_db(
+                tenant_id
+            )
+
+        db.command(
+            "ping"
+        )
 
     except Exception as error:
 
         return jsonify({
-            "service": "ngo-backend",
-            "database": "unavailable",
-            "error": str(error),
-            "status": False
+            "service":
+                "ngo-backend",
+            "database":
+                "unavailable",
+            "error":
+                str(error),
+            "status":
+                False
         }), 503
 
     if CLOUDINARY_ENABLED:
@@ -351,10 +480,14 @@ def health():
         storage_type = "local"
 
     return jsonify({
-        "service": "ngo-backend",
-        "database": "connected",
-        "storage": storage_type,
-        "status": True
+        "service":
+            "ngo-backend",
+        "database":
+            "connected",
+        "storage":
+            storage_type,
+        "status":
+            True
     }), 200
 
 
@@ -364,7 +497,9 @@ def health():
 
 def safe_upload_path(key):
 
-    normalized_key = unquote(key).replace(
+    normalized_key = unquote(
+        key
+    ).replace(
         "\\",
         "/"
     )
@@ -404,7 +539,9 @@ def safe_upload_path(key):
 
 def get_cloudinary_resource_type(key):
 
-    extension = Path(key).suffix.lower()
+    extension = Path(
+        key
+    ).suffix.lower()
 
     image_extensions = {
         ".jpg",
@@ -426,9 +563,11 @@ def get_cloudinary_resource_type(key):
     }
 
     if extension in image_extensions:
+
         return "image"
 
     if extension in video_extensions:
+
         return "video"
 
     return "raw"
@@ -439,7 +578,9 @@ def get_cloudinary_public_id(
     resource_type
 ):
 
-    normalized_key = unquote(key).replace(
+    normalized_key = unquote(
+        key
+    ).replace(
         "\\",
         "/"
     ).strip("/")
@@ -448,7 +589,9 @@ def get_cloudinary_public_id(
 
         return normalized_key
 
-    path = Path(normalized_key)
+    path = Path(
+        normalized_key
+    )
 
     return str(
         path.with_suffix("")
@@ -474,19 +617,7 @@ def build_cloudinary_url(
     try:
 
         # -------------------------------------------------
-        # IMAGE OPTIMIZATION
-        # -------------------------------------------------
-        #
-        # q_auto  -> Cloudinary automatically selects
-        #            an efficient quality level.
-        #
-        # f_auto  -> Browser receives the best supported
-        #            image format such as WebP/AVIF.
-        #
-        # width 1200 -> Prevents unnecessarily huge
-        #               project images from downloading.
-        #
-        # crop limit -> Keeps original aspect ratio.
+        # IMAGE
         # -------------------------------------------------
 
         if resource_type == "image":
@@ -499,10 +630,14 @@ def build_cloudinary_url(
                     secure=True,
                     transformation=[
                         {
-                            "quality": "auto",
-                            "fetch_format": "auto",
-                            "width": 1200,
-                            "crop": "limit"
+                            "quality":
+                                "auto",
+                            "fetch_format":
+                                "auto",
+                            "width":
+                                1200,
+                            "crop":
+                                "limit"
                         }
                     ]
                 )
@@ -560,24 +695,6 @@ def convert_media_url_to_cloudinary(
     media_url
 ):
 
-    """
-    Converts old backend URLs:
-
-        /api/local-files/projects/...
-
-    into direct Cloudinary URLs.
-
-    Also optimizes existing Cloudinary image URLs.
-
-    Browser flow becomes:
-
-        Frontend -> Cloudinary
-
-    instead of:
-
-        Frontend -> Flask -> 302 -> Cloudinary
-    """
-
     if not isinstance(
         media_url,
         str
@@ -591,15 +708,15 @@ def convert_media_url_to_cloudinary(
 
         return media_url
 
-    # =====================================================
-    # OLD BACKEND URL
-    # =====================================================
-
     parsed_url = urlparse(
         media_url
     )
 
     local_marker = "/api/local-files/"
+
+    # -----------------------------------------------------
+    # OLD BACKEND URL
+    # -----------------------------------------------------
 
     if local_marker in parsed_url.path:
 
@@ -651,13 +768,14 @@ def convert_media_url_to_cloudinary(
 
             return media_url
 
-    # =====================================================
+    # -----------------------------------------------------
     # ALREADY CLOUDINARY URL
-    # =====================================================
+    # -----------------------------------------------------
 
     if (
         CLOUDINARY_ENABLED
-        and "res.cloudinary.com" in parsed_url.netloc
+        and "res.cloudinary.com"
+        in parsed_url.netloc
     ):
 
         try:
@@ -692,7 +810,7 @@ def convert_media_url_to_cloudinary(
                 upload_index + 1:
             ]
 
-            # Remove Cloudinary version
+            # Remove version
             if (
                 public_parts
                 and public_parts[0].startswith("v")
@@ -720,9 +838,11 @@ def convert_media_url_to_cloudinary(
                     "/"
                 )
 
-            optimized_url = build_cloudinary_url(
-                public_id,
-                resource_type
+            optimized_url = (
+                build_cloudinary_url(
+                    public_id,
+                    resource_type
+                )
             )
 
             if optimized_url:
@@ -754,7 +874,7 @@ def upload_to_cloudinary(
             "Cloudinary is not configured. "
             "Please check CLOUDINARY_CLOUD_NAME, "
             "CLOUDINARY_API_KEY and "
-            "CLOUDINARY_API_SECRET in .env"
+            "CLOUDINARY_API_SECRET in Render."
         )
 
     if not file_bytes:
@@ -763,7 +883,9 @@ def upload_to_cloudinary(
             "File is empty"
         )
 
-    normalized_key = unquote(key).replace(
+    normalized_key = unquote(
+        key
+    ).replace(
         "\\",
         "/"
     ).strip("/")
@@ -782,12 +904,18 @@ def upload_to_cloudinary(
     )
 
     upload_options = {
-        "public_id": public_id,
-        "resource_type": resource_type,
-        "type": "upload",
-        "overwrite": True,
-        "invalidate": True,
-        "unique_filename": False
+        "public_id":
+            public_id,
+        "resource_type":
+            resource_type,
+        "type":
+            "upload",
+        "overwrite":
+            True,
+        "invalidate":
+            True,
+        "unique_filename":
+            False
     }
 
     print(
@@ -818,9 +946,12 @@ def upload_to_cloudinary(
     )
 
     return {
-        "url": secure_url,
-        "public_id": public_id,
-        "resource_type": resource_type
+        "url":
+            secure_url,
+        "public_id":
+            public_id,
+        "resource_type":
+            resource_type
     }
 
 
@@ -880,7 +1011,7 @@ def upload_local_file(key):
             }), 200
 
         # -------------------------------------------------
-        # AWS S3
+        # AWS
         # -------------------------------------------------
 
         if AWS_ENABLED and s3_client:
@@ -937,8 +1068,10 @@ def upload_local_file(key):
     except ValueError as error:
 
         return jsonify({
-            "error": str(error),
-            "status": False
+            "error":
+                str(error),
+            "status":
+                False
         }), 400
 
     except Exception as error:
@@ -948,8 +1081,10 @@ def upload_local_file(key):
         traceback.print_exc()
 
         return jsonify({
-            "error": str(error),
-            "status": False
+            "error":
+                str(error),
+            "status":
+                False
         }), 500
 
 
@@ -1038,6 +1173,7 @@ def serve_local_file(key):
 def delete_media_url(image_url):
 
     if not image_url:
+
         return
 
     parsed_url = urlparse(
@@ -1107,7 +1243,8 @@ def delete_media_url(image_url):
 
     if (
         CLOUDINARY_ENABLED
-        and "res.cloudinary.com" in parsed_url.netloc
+        and "res.cloudinary.com"
+        in parsed_url.netloc
     ):
 
         path_parts = [
@@ -1123,6 +1260,7 @@ def delete_media_url(image_url):
             )
 
             if upload_index == 0:
+
                 return
 
             resource_type = path_parts[
@@ -1149,7 +1287,6 @@ def delete_media_url(image_url):
 
                 public_parts = public_parts[1:]
 
-            # Remove transformation segments if any
             transformation_names = {
                 "q_auto",
                 "f_auto",
@@ -1296,16 +1433,20 @@ def delete_media_prefix(prefix):
 
             keys = [
                 {
-                    "Key": item["Key"]
+                    "Key":
+                        item["Key"]
                 }
-                for item in objects_to_delete["Contents"]
+                for item
+                in objects_to_delete["Contents"]
             ]
 
             s3_client.delete_objects(
                 Bucket=AWS_BUCKET_NAME,
                 Delete={
-                    "Objects": keys,
-                    "Quiet": True
+                    "Objects":
+                        keys,
+                    "Quiet":
+                        True
                 }
             )
 
@@ -1332,7 +1473,10 @@ def delete_media_prefix(prefix):
 def token_required(f):
 
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def decorated(
+        *args,
+        **kwargs
+    ):
 
         token = request.headers.get(
             "Authorization"
@@ -1369,7 +1513,9 @@ def token_required(f):
                 request.tenant_id
             ).volunteers.find_one({
                 "_id":
-                    ObjectId(decoded["sub"])
+                    ObjectId(
+                        decoded["sub"]
+                    )
             })
 
             if not current_user:
@@ -1478,7 +1624,9 @@ def login():
             "iat":
                 datetime.utcnow(),
             "sub":
-                str(user["_id"])
+                str(
+                    user["_id"]
+                )
         }
 
         token = jwt.encode(
@@ -1513,13 +1661,19 @@ def login():
     methods=["GET"]
 )
 @token_required
-def verify_token(current_user):
+def verify_token(
+    current_user
+):
 
     return jsonify({
         "username":
-            current_user.get("username"),
+            current_user.get(
+                "username"
+            ),
         "role":
-            current_user.get("role"),
+            current_user.get(
+                "role"
+            ),
         "status":
             True
     }), 200
@@ -1534,7 +1688,9 @@ def verify_token(current_user):
     methods=["POST"]
 )
 @token_required
-def create_volunteer(current_user):
+def create_volunteer(
+    current_user
+):
 
     db = get_db(
         request.tenant_id
@@ -1555,7 +1711,9 @@ def create_volunteer(current_user):
 
     try:
 
-        if user_data.get("password"):
+        if user_data.get(
+            "password"
+        ):
 
             user_data["password"] = (
                 generate_password_hash(
@@ -1579,7 +1737,9 @@ def create_volunteer(current_user):
             "message":
                 "User created successfully",
             "user_id":
-                str(result.inserted_id),
+                str(
+                    result.inserted_id
+                ),
             "status":
                 True
         }), 201
@@ -1625,7 +1785,9 @@ def update_volunteer(
                 False
         }), 400
 
-    if data.get("password"):
+    if data.get(
+        "password"
+    ):
 
         data["password"] = (
             generate_password_hash(
@@ -1698,19 +1860,38 @@ def get_volunteers():
 
             results.append({
                 "_id":
-                    str(doc["_id"]),
+                    str(
+                        doc["_id"]
+                    ),
                 "id":
-                    str(doc["_id"]),
+                    str(
+                        doc["_id"]
+                    ),
                 "name":
-                    doc.get("name", ""),
+                    doc.get(
+                        "name",
+                        ""
+                    ),
                 "status":
-                    doc.get("status", ""),
+                    doc.get(
+                        "status",
+                        ""
+                    ),
                 "role":
-                    doc.get("role", ""),
+                    doc.get(
+                        "role",
+                        ""
+                    ),
                 "mobile":
-                    doc.get("mobile", ""),
+                    doc.get(
+                        "mobile",
+                        ""
+                    ),
                 "address":
-                    doc.get("address", "")
+                    doc.get(
+                        "address",
+                        ""
+                    )
             })
 
         return jsonify({
@@ -1870,12 +2051,16 @@ def register_volunteer():
 
     existing_user = db.volunteers.find_one({
         "mobile":
-            user_data.get("mobile")
+            user_data.get(
+                "mobile"
+            )
     })
 
     if (
         existing_user
-        and existing_user.get("status")
+        and existing_user.get(
+            "status"
+        )
         in [
             "active",
             "pending"
@@ -1917,7 +2102,9 @@ def register_volunteer():
             "message":
                 "User created successfully",
             "user_id":
-                str(result.inserted_id),
+                str(
+                    result.inserted_id
+                ),
             "status":
                 True
         }), 201
@@ -2032,7 +2219,9 @@ def create_event(
             "message":
                 "Event created successfully",
             "event_id":
-                str(result.inserted_id),
+                str(
+                    result.inserted_id
+                ),
             "status":
                 True
         }), 201
@@ -2268,21 +2457,43 @@ def get_events():
 
             results.append({
                 "id":
-                    str(doc["_id"]),
+                    str(
+                        doc["_id"]
+                    ),
                 "_id":
-                    str(doc["_id"]),
+                    str(
+                        doc["_id"]
+                    ),
                 "name":
-                    doc.get("name", ""),
+                    doc.get(
+                        "name",
+                        ""
+                    ),
                 "title":
-                    doc.get("title", ""),
+                    doc.get(
+                        "title",
+                        ""
+                    ),
                 "start":
-                    doc.get("start", ""),
+                    doc.get(
+                        "start",
+                        ""
+                    ),
                 "end":
-                    doc.get("end", ""),
+                    doc.get(
+                        "end",
+                        ""
+                    ),
                 "address":
-                    doc.get("address", ""),
+                    doc.get(
+                        "address",
+                        ""
+                    ),
                 "description":
-                    doc.get("description", ""),
+                    doc.get(
+                        "description",
+                        ""
+                    ),
                 "images": [
                     convert_media_url_to_cloudinary(
                         image
@@ -2506,9 +2717,13 @@ def generate_presigned_url():
                 storage,
             "status":
                 True
-        })
+        }), 200
 
     except Exception as e:
+
+        import traceback
+
+        traceback.print_exc()
 
         return jsonify({
             "error":
@@ -2637,7 +2852,7 @@ def create_project(
         )
 
         # -------------------------------------------------
-        # Convert old image URLs
+        # CONVERT IMAGES
         # -------------------------------------------------
 
         if isinstance(
@@ -2653,7 +2868,7 @@ def create_project(
             ]
 
         # -------------------------------------------------
-        # Convert PDFs
+        # CONVERT PDFS
         # -------------------------------------------------
 
         project_data["pdfs"] = [
@@ -2685,7 +2900,9 @@ def create_project(
             "message":
                 "Project created successfully",
             "project_id":
-                str(result.inserted_id),
+                str(
+                    result.inserted_id
+                ),
             "images":
                 project_data.get(
                     "images",
@@ -2912,7 +3129,7 @@ def update_project(
             }), 400
 
         # -------------------------------------------------
-        # Convert images
+        # CONVERT IMAGES
         # -------------------------------------------------
 
         if isinstance(
@@ -2928,7 +3145,7 @@ def update_project(
             ]
 
         # -------------------------------------------------
-        # Convert PDFs
+        # CONVERT PDFS
         # -------------------------------------------------
 
         new_pdfs = [
@@ -3135,7 +3352,7 @@ def get_projects():
                 project_pdfs = []
 
             # -------------------------------------------------
-            # DIRECT + OPTIMIZED IMAGE URLS
+            # IMAGES
             # -------------------------------------------------
 
             project_images = [
@@ -3149,7 +3366,7 @@ def get_projects():
             ]
 
             # -------------------------------------------------
-            # DIRECT PDF URLS
+            # PDFS
             # -------------------------------------------------
 
             project_pdfs = [
@@ -3162,10 +3379,14 @@ def get_projects():
             results.append({
 
                 "id":
-                    str(doc["_id"]),
+                    str(
+                        doc["_id"]
+                    ),
 
                 "_id":
-                    str(doc["_id"]),
+                    str(
+                        doc["_id"]
+                    ),
 
                 "name":
                     doc.get(
@@ -3278,13 +3499,17 @@ def get_project_by_id(
             project["_id"]
         )
 
-        if project.get("created_by"):
+        if project.get(
+            "created_by"
+        ):
 
             project["created_by"] = str(
                 project["created_by"]
             )
 
-        if project.get("created_at"):
+        if project.get(
+            "created_at"
+        ):
 
             project["created_at"] = str(
                 project["created_at"]
@@ -3297,14 +3522,16 @@ def get_project_by_id(
             )
         )
 
-        if project.get("modified_at"):
+        if project.get(
+            "modified_at"
+        ):
 
             project["modified_at"] = str(
                 project["modified_at"]
             )
 
         # -------------------------------------------------
-        # DIRECT + OPTIMIZED IMAGES
+        # IMAGES
         # -------------------------------------------------
 
         project["images"] = [
@@ -3334,7 +3561,7 @@ def get_project_by_id(
             project_pdfs = []
 
         # -------------------------------------------------
-        # DIRECT PDF URLS
+        # PDF URLS
         # -------------------------------------------------
 
         project_pdfs = [
@@ -3406,6 +3633,16 @@ if __name__ == "__main__":
     print(
         "Cloudinary enabled:",
         CLOUDINARY_ENABLED
+    )
+
+    print(
+        "MongoDB configured:",
+        bool(
+            os.getenv(
+                "MONGODB_URI",
+                ""
+            ).strip()
+        )
     )
 
     if CLOUDINARY_ENABLED:
