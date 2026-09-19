@@ -23,15 +23,6 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 # =========================================================
-# CLOUDINARY
-# =========================================================
-
-import cloudinary
-import cloudinary.uploader
-import cloudinary.api
-import cloudinary.utils
-
-# =========================================================
 # UPLOAD CONFIGURATION
 # =========================================================
 
@@ -46,6 +37,10 @@ UPLOAD_DIR.mkdir(
     parents=True,
     exist_ok=True
 )
+
+# =========================================================
+# FLASK
+# =========================================================
 
 app = Flask(__name__)
 
@@ -89,6 +84,7 @@ AWS_REGION = os.getenv(
 s3_client = None
 
 if AWS_ENABLED:
+
     import boto3
 
     s3_client = boto3.client(
@@ -97,8 +93,13 @@ if AWS_ENABLED:
     )
 
 # =========================================================
-# CLOUDINARY CONFIGURATION
+# CLOUDINARY
 # =========================================================
+
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+import cloudinary.utils
 
 CLOUDINARY_CLOUD_NAME = os.getenv(
     "CLOUDINARY_CLOUD_NAME",
@@ -169,15 +170,6 @@ with tenants_config_path.open() as f:
 
 def get_db(tenant_id):
 
-    """
-    Production:
-        If MONGODB_URI exists, use MongoDB Atlas directly.
-        tenants_config.json is NOT required for production.
-
-    Local:
-        If MONGODB_URI does not exist, use tenants_config.json.
-    """
-
     connection_uri = os.getenv(
         "MONGODB_URI",
         ""
@@ -194,9 +186,6 @@ def get_db(tenant_id):
             ""
         ).strip()
 
-        # Your existing production setup uses the
-        # localhost database name unless another database
-        # name is explicitly provided in Render.
         if not db_name:
 
             tenant_config = tenants_config.get(
@@ -221,7 +210,7 @@ def get_db(tenant_id):
         return g.db
 
     # -----------------------------------------------------
-    # LOCAL DEVELOPMENT
+    # LOCAL
     # -----------------------------------------------------
 
     tenant_config = tenants_config.get(
@@ -282,7 +271,9 @@ def password_matches(
     ):
         return False
 
-    if is_password_hash(stored_password):
+    if is_password_hash(
+        stored_password
+    ):
 
         return check_password_hash(
             stored_password,
@@ -319,27 +310,22 @@ def set_tenant():
     if not tenant_id:
 
         return jsonify({
-            "error": "Tenant ID is required",
-            "status": False
+            "error":
+                "Tenant ID is required",
+            "status":
+                False
         }), 400
 
     tenant_id = tenant_id.strip().lower()
-
-    # -----------------------------------------------------
-    # PRODUCTION
-    # -----------------------------------------------------
-    #
-    # When MONGODB_URI is configured on Render, the
-    # production Vercel hostname is accepted directly.
-    #
-    # This avoids depending on tenants_config.json for
-    # production.
-    # -----------------------------------------------------
 
     connection_uri = os.getenv(
         "MONGODB_URI",
         ""
     ).strip()
+
+    # -----------------------------------------------------
+    # PRODUCTION
+    # -----------------------------------------------------
 
     if connection_uri:
 
@@ -357,8 +343,6 @@ def set_tenant():
 
             return
 
-        # Also allow a tenant that exists in the config
-        # when MONGODB_URI is configured.
         if tenant_id in tenants_config:
 
             request.tenant_id = tenant_id
@@ -366,26 +350,30 @@ def set_tenant():
             return
 
         return jsonify({
-            "error": "Invalid tenant ID",
-            "status": False
+            "error":
+                "Invalid tenant ID",
+            "status":
+                False
         }), 400
 
     # -----------------------------------------------------
-    # LOCAL DEVELOPMENT
+    # LOCAL
     # -----------------------------------------------------
 
     if tenant_id not in tenants_config:
 
         return jsonify({
-            "error": "Invalid tenant ID",
-            "status": False
+            "error":
+                "Invalid tenant ID",
+            "status":
+                False
         }), 400
 
     request.tenant_id = tenant_id
 
 
 # =========================================================
-# CLOSE DATABASE CONNECTION
+# CLOSE DATABASE
 # =========================================================
 
 @app.teardown_appcontext
@@ -418,37 +406,9 @@ def health():
 
     try:
 
-        # -------------------------------------------------
-        # PRODUCTION
-        # -------------------------------------------------
-
-        if os.getenv(
-            "MONGODB_URI",
-            ""
-        ).strip():
-
-            db = get_db(
-                tenant_id
-            )
-
-        # -------------------------------------------------
-        # LOCAL
-        # -------------------------------------------------
-
-        else:
-
-            if tenant_id not in tenants_config:
-
-                return jsonify({
-                    "error":
-                        "Invalid tenant ID",
-                    "status":
-                        False
-                }), 400
-
-            db = get_db(
-                tenant_id
-            )
+        db = get_db(
+            tenant_id
+        )
 
         db.command(
             "ping"
@@ -534,7 +494,7 @@ def safe_upload_path(key):
 
 
 # =========================================================
-# CLOUDINARY HELPERS
+# CLOUDINARY RESOURCE TYPE
 # =========================================================
 
 def get_cloudinary_resource_type(key):
@@ -554,6 +514,10 @@ def get_cloudinary_resource_type(key):
         ".svg"
     }
 
+    pdf_extensions = {
+        ".pdf"
+    }
+
     video_extensions = {
         ".mp4",
         ".mov",
@@ -561,6 +525,12 @@ def get_cloudinary_resource_type(key):
         ".webm",
         ".mkv"
     }
+
+    # IMPORTANT:
+    # Cloudinary handles PDFs as IMAGE assets.
+    if extension in pdf_extensions:
+
+        return "image"
 
     if extension in image_extensions:
 
@@ -572,6 +542,10 @@ def get_cloudinary_resource_type(key):
 
     return "raw"
 
+
+# =========================================================
+# CLOUDINARY PUBLIC ID
+# =========================================================
 
 def get_cloudinary_public_id(
     key,
@@ -585,29 +559,42 @@ def get_cloudinary_public_id(
         "/"
     ).strip("/")
 
-    if resource_type == "raw":
-
-        return normalized_key
-
     path = Path(
         normalized_key
     )
 
-    return str(
-        path.with_suffix("")
-    ).replace(
-        "\\",
-        "/"
-    )
+    # Image + PDF
+    if resource_type == "image":
+
+        return str(
+            path.with_suffix("")
+        ).replace(
+            "\\",
+            "/"
+        )
+
+    # Video
+    if resource_type == "video":
+
+        return str(
+            path.with_suffix("")
+        ).replace(
+            "\\",
+            "/"
+        )
+
+    # Raw
+    return normalized_key
 
 
 # =========================================================
-# CLOUDINARY OPTIMIZED URL
+# CLOUDINARY URL
 # =========================================================
 
 def build_cloudinary_url(
     public_id,
-    resource_type
+    resource_type,
+    file_extension=None
 ):
 
     if not CLOUDINARY_ENABLED:
@@ -615,6 +602,24 @@ def build_cloudinary_url(
         return None
 
     try:
+
+        # -------------------------------------------------
+        # PDF
+        # -------------------------------------------------
+
+        if file_extension == ".pdf":
+
+            cloudinary_url, options = (
+                cloudinary.utils.cloudinary_url(
+                    public_id,
+                    resource_type="image",
+                    type="upload",
+                    format="pdf",
+                    secure=True
+                )
+            )
+
+            return cloudinary_url
 
         # -------------------------------------------------
         # IMAGE
@@ -663,7 +668,7 @@ def build_cloudinary_url(
             return cloudinary_url
 
         # -------------------------------------------------
-        # PDF / RAW
+        # RAW
         # -------------------------------------------------
 
         cloudinary_url, options = (
@@ -688,7 +693,7 @@ def build_cloudinary_url(
 
 
 # =========================================================
-# DIRECT CLOUDINARY URL CONVERTER
+# CONVERT MEDIA URL TO CLOUDINARY
 # =========================================================
 
 def convert_media_url_to_cloudinary(
@@ -714,9 +719,9 @@ def convert_media_url_to_cloudinary(
 
     local_marker = "/api/local-files/"
 
-    # -----------------------------------------------------
+    # =====================================================
     # OLD BACKEND URL
-    # -----------------------------------------------------
+    # =====================================================
 
     if local_marker in parsed_url.path:
 
@@ -743,6 +748,10 @@ def convert_media_url_to_cloudinary(
                 )
             )
 
+            extension = Path(
+                normalized_key
+            ).suffix.lower()
+
             public_id = (
                 get_cloudinary_public_id(
                     normalized_key,
@@ -750,9 +759,12 @@ def convert_media_url_to_cloudinary(
                 )
             )
 
-            direct_url = build_cloudinary_url(
-                public_id,
-                resource_type
+            direct_url = (
+                build_cloudinary_url(
+                    public_id,
+                    resource_type,
+                    extension
+                )
             )
 
             if direct_url:
@@ -768,9 +780,9 @@ def convert_media_url_to_cloudinary(
 
             return media_url
 
-    # -----------------------------------------------------
-    # ALREADY CLOUDINARY URL
-    # -----------------------------------------------------
+    # =====================================================
+    # CLOUDINARY URL
+    # =====================================================
 
     if (
         CLOUDINARY_ENABLED
@@ -823,36 +835,75 @@ def convert_media_url_to_cloudinary(
 
                 return media_url
 
-            public_id = "/".join(
-                public_parts
+            public_id_with_extension = (
+                "/".join(
+                    public_parts
+                )
             )
 
-            if resource_type != "raw":
+            # -------------------------------------------------
+            # PDF
+            # -------------------------------------------------
+
+            if (
+                resource_type == "image"
+                and public_id_with_extension.lower().endswith(
+                    ".pdf"
+                )
+            ):
 
                 public_id = str(
                     Path(
-                        public_id
+                        public_id_with_extension
                     ).with_suffix("")
                 ).replace(
                     "\\",
                     "/"
                 )
 
-            optimized_url = (
-                build_cloudinary_url(
+                return build_cloudinary_url(
                     public_id,
-                    resource_type
+                    "image",
+                    ".pdf"
                 )
+
+            # -------------------------------------------------
+            # RAW
+            # -------------------------------------------------
+
+            if resource_type == "raw":
+
+                public_id = (
+                    public_id_with_extension
+                )
+
+                return build_cloudinary_url(
+                    public_id,
+                    "raw"
+                )
+
+            # -------------------------------------------------
+            # IMAGE / VIDEO
+            # -------------------------------------------------
+
+            public_id = str(
+                Path(
+                    public_id_with_extension
+                ).with_suffix("")
+            ).replace(
+                "\\",
+                "/"
             )
 
-            if optimized_url:
-
-                return optimized_url
+            return build_cloudinary_url(
+                public_id,
+                resource_type
+            )
 
         except Exception as error:
 
             print(
-                "Cloudinary URL optimization error:",
+                "Cloudinary URL conversion error:",
                 str(error)
             )
 
@@ -872,9 +923,7 @@ def upload_to_cloudinary(
 
         raise RuntimeError(
             "Cloudinary is not configured. "
-            "Please check CLOUDINARY_CLOUD_NAME, "
-            "CLOUDINARY_API_KEY and "
-            "CLOUDINARY_API_SECRET in Render."
+            "Please check Cloudinary environment variables."
         )
 
     if not file_bytes:
@@ -889,6 +938,10 @@ def upload_to_cloudinary(
         "\\",
         "/"
     ).strip("/")
+
+    extension = Path(
+        normalized_key
+    ).suffix.lower()
 
     resource_type = (
         get_cloudinary_resource_type(
@@ -906,23 +959,65 @@ def upload_to_cloudinary(
     upload_options = {
         "public_id":
             public_id,
+
         "resource_type":
             resource_type,
+
         "type":
             "upload",
+
         "overwrite":
             True,
+
         "invalidate":
             True,
+
         "unique_filename":
             False
     }
 
+    # =====================================================
+    # PDF
+    # =====================================================
+
+    if extension == ".pdf":
+
+        # Cloudinary PDFs should be image assets.
+        upload_options["resource_type"] = "image"
+
+        # Preserve PDF format.
+        upload_options["format"] = "pdf"
+
     print(
-        "Uploading to Cloudinary:",
-        public_id,
-        "resource_type:",
-        resource_type
+        "=============================================="
+    )
+
+    print(
+        "Uploading file to Cloudinary"
+    )
+
+    print(
+        "File:",
+        normalized_key
+    )
+
+    print(
+        "Extension:",
+        extension
+    )
+
+    print(
+        "Resource Type:",
+        upload_options["resource_type"]
+    )
+
+    print(
+        "Public ID:",
+        public_id
+    )
+
+    print(
+        "=============================================="
     )
 
     result = cloudinary.uploader.upload(
@@ -937,26 +1032,36 @@ def upload_to_cloudinary(
     if not secure_url:
 
         raise RuntimeError(
-            "Cloudinary did not return a secure URL"
+            "Cloudinary did not return secure_url"
         )
 
     print(
-        "Cloudinary upload successful:",
+        "Cloudinary upload successful:"
+    )
+
+    print(
         secure_url
     )
 
     return {
         "url":
             secure_url,
+
         "public_id":
             public_id,
+
         "resource_type":
-            resource_type
+            upload_options["resource_type"],
+
+        "format":
+            result.get(
+                "format"
+            )
     }
 
 
 # =========================================================
-# LOCAL FILE UPLOAD / CLOUDINARY UPLOAD
+# UPLOAD FILE
 # =========================================================
 
 @app.route(
@@ -978,9 +1083,9 @@ def upload_local_file(key):
                     False
             }), 400
 
-        # -------------------------------------------------
+        # =================================================
         # CLOUDINARY
-        # -------------------------------------------------
+        # =================================================
 
         if CLOUDINARY_ENABLED:
 
@@ -989,10 +1094,15 @@ def upload_local_file(key):
                 file_bytes
             )
 
+            extension = Path(
+                unquote(key)
+            ).suffix.lower()
+
             optimized_url = (
                 build_cloudinary_url(
                     result["public_id"],
-                    result["resource_type"]
+                    result["resource_type"],
+                    extension
                 )
             )
 
@@ -1000,19 +1110,26 @@ def upload_local_file(key):
                 "url":
                     optimized_url
                     or result["url"],
+
                 "original_url":
                     result["url"],
+
                 "file_name":
                     key,
+
                 "storage":
                     "cloudinary",
+
+                "resource_type":
+                    result["resource_type"],
+
                 "status":
                     True
             }), 200
 
-        # -------------------------------------------------
+        # =================================================
         # AWS
-        # -------------------------------------------------
+        # =================================================
 
         if AWS_ENABLED and s3_client:
 
@@ -1027,17 +1144,20 @@ def upload_local_file(key):
                     f"https://{AWS_BUCKET_NAME}.s3."
                     f"{AWS_REGION}.amazonaws.com/"
                     f"{unquote(key)}",
+
                 "file_name":
                     key,
+
                 "storage":
                     "s3",
+
                 "status":
                     True
             }), 200
 
-        # -------------------------------------------------
-        # LOCAL STORAGE
-        # -------------------------------------------------
+        # =================================================
+        # LOCAL
+        # =================================================
 
         target = safe_upload_path(
             key
@@ -1057,10 +1177,13 @@ def upload_local_file(key):
                 f"{request.host_url.rstrip('/')}"
                 f"/api/local-files/"
                 f"{quote(key, safe='/')}",
+
             "file_name":
                 key,
+
             "storage":
                 "local",
+
             "status":
                 True
         }), 200
@@ -1089,7 +1212,7 @@ def upload_local_file(key):
 
 
 # =========================================================
-# SERVE FILE
+# GET FILE
 # =========================================================
 
 @app.route(
@@ -1097,6 +1220,10 @@ def upload_local_file(key):
     methods=["GET"]
 )
 def serve_local_file(key):
+
+    # =====================================================
+    # CLOUDINARY
+    # =====================================================
 
     if CLOUDINARY_ENABLED:
 
@@ -1107,6 +1234,10 @@ def serve_local_file(key):
                 .replace("\\", "/")
                 .strip("/")
             )
+
+            extension = Path(
+                normalized_key
+            ).suffix.lower()
 
             resource_type = (
                 get_cloudinary_resource_type(
@@ -1124,7 +1255,8 @@ def serve_local_file(key):
             cloudinary_url = (
                 build_cloudinary_url(
                     public_id,
-                    resource_type
+                    resource_type,
+                    extension
                 )
             )
 
@@ -1141,6 +1273,10 @@ def serve_local_file(key):
                 "Cloudinary GET error:",
                 str(error)
             )
+
+    # =====================================================
+    # AWS
+    # =====================================================
 
     if AWS_ENABLED and s3_client:
 
@@ -1160,6 +1296,10 @@ def serve_local_file(key):
             code=302
         )
 
+    # =====================================================
+    # LOCAL
+    # =====================================================
+
     return send_from_directory(
         UPLOAD_DIR,
         key
@@ -1170,7 +1310,9 @@ def serve_local_file(key):
 # DELETE MEDIA URL
 # =========================================================
 
-def delete_media_url(image_url):
+def delete_media_url(
+    image_url
+):
 
     if not image_url:
 
@@ -1182,9 +1324,9 @@ def delete_media_url(image_url):
 
     local_marker = "/api/local-files/"
 
-    # -----------------------------------------------------
+    # =====================================================
     # BACKEND MEDIA URL
-    # -----------------------------------------------------
+    # =====================================================
 
     if local_marker in parsed_url.path:
 
@@ -1237,9 +1379,9 @@ def delete_media_url(image_url):
 
         return
 
-    # -----------------------------------------------------
+    # =====================================================
     # CLOUDINARY URL
-    # -----------------------------------------------------
+    # =====================================================
 
     if (
         CLOUDINARY_ENABLED
@@ -1279,6 +1421,7 @@ def delete_media_url(image_url):
                 upload_index + 1:
             ]
 
+            # Remove version
             if (
                 public_parts
                 and public_parts[0].startswith("v")
@@ -1287,28 +1430,33 @@ def delete_media_url(image_url):
 
                 public_parts = public_parts[1:]
 
-            transformation_names = {
-                "q_auto",
-                "f_auto",
-                "c_limit",
-                "c_fill",
-                "c_fit",
-                "c_scale"
-            }
-
-            public_parts = [
-                part
-                for part in public_parts
-                if part not in transformation_names
-                and not part.startswith("w_")
-                and not part.startswith("h_")
-            ]
-
             public_id = "/".join(
                 public_parts
             )
 
-            if resource_type != "raw":
+            # =================================================
+            # PDF IMAGE ASSET
+            # =================================================
+
+            if (
+                resource_type == "image"
+                and public_id.lower().endswith(".pdf")
+            ):
+
+                public_id = str(
+                    Path(
+                        public_id
+                    ).with_suffix("")
+                ).replace(
+                    "\\",
+                    "/"
+                )
+
+            # =================================================
+            # NORMAL IMAGE / VIDEO
+            # =================================================
+
+            elif resource_type != "raw":
 
                 public_id = str(
                     Path(
@@ -1337,9 +1485,9 @@ def delete_media_url(image_url):
 
             raise
 
-    # -----------------------------------------------------
-    # AWS S3
-    # -----------------------------------------------------
+    # =====================================================
+    # AWS
+    # =====================================================
 
     if AWS_ENABLED and s3_client:
 
@@ -1366,17 +1514,14 @@ def delete_media_url(image_url):
 
         return
 
-    raise RuntimeError(
-        "Remote media deletion is unavailable "
-        "while AWS is disabled"
-    )
-
 
 # =========================================================
 # DELETE MEDIA PREFIX
 # =========================================================
 
-def delete_media_prefix(prefix):
+def delete_media_prefix(
+    prefix
+):
 
     if CLOUDINARY_ENABLED:
 
@@ -1436,8 +1581,7 @@ def delete_media_prefix(prefix):
                     "Key":
                         item["Key"]
                 }
-                for item
-                in objects_to_delete["Contents"]
+                for item in objects_to_delete["Contents"]
             ]
 
             s3_client.delete_objects(
@@ -1621,8 +1765,10 @@ def login():
             "exp":
                 datetime.utcnow()
                 + timedelta(days=1),
+
             "iat":
                 datetime.utcnow(),
+
             "sub":
                 str(
                     user["_id"]
@@ -1638,8 +1784,10 @@ def login():
         return jsonify({
             "token":
                 token,
+
             "role":
                 user["role"],
+
             "status":
                 True
         }), 200
@@ -1670,10 +1818,12 @@ def verify_token(
             current_user.get(
                 "username"
             ),
+
         "role":
             current_user.get(
                 "role"
             ),
+
         "status":
             True
     }), 200
@@ -1736,10 +1886,12 @@ def create_volunteer(
         return jsonify({
             "message":
                 "User created successfully",
+
             "user_id":
                 str(
                     result.inserted_id
                 ),
+
             "status":
                 True
         }), 201
@@ -1863,30 +2015,36 @@ def get_volunteers():
                     str(
                         doc["_id"]
                     ),
+
                 "id":
                     str(
                         doc["_id"]
                     ),
+
                 "name":
                     doc.get(
                         "name",
                         ""
                     ),
+
                 "status":
                     doc.get(
                         "status",
                         ""
                     ),
+
                 "role":
                     doc.get(
                         "role",
                         ""
                     ),
+
                 "mobile":
                     doc.get(
                         "mobile",
                         ""
                     ),
+
                 "address":
                     doc.get(
                         "address",
@@ -1897,6 +2055,7 @@ def get_volunteers():
         return jsonify({
             "volunteers":
                 results,
+
             "status":
                 True
         }), 200
@@ -1956,6 +2115,7 @@ def get_volunteer_requests():
         return jsonify({
             "volunteers":
                 results,
+
             "status":
                 True
         }), 200
@@ -1997,8 +2157,10 @@ def authorize_volunteer(
             "$set": {
                 "status":
                     "active",
+
                 "authorized_by":
                     current_user["_id"],
+
                 "authorized_at":
                     datetime.now()
             }
@@ -2101,10 +2263,12 @@ def register_volunteer():
         return jsonify({
             "message":
                 "User created successfully",
+
             "user_id":
                 str(
                     result.inserted_id
                 ),
+
             "status":
                 True
         }), 201
@@ -2146,8 +2310,10 @@ def delete_volunteer(
             "$set": {
                 "status":
                     "rejected",
+
                 "deleted_by":
                     current_user["_id"],
+
                 "deleted_at":
                     datetime.now()
             }
@@ -2218,10 +2384,12 @@ def create_event(
         return jsonify({
             "message":
                 "Event created successfully",
+
             "event_id":
                 str(
                     result.inserted_id
                 ),
+
             "status":
                 True
         }), 201
@@ -2330,6 +2498,7 @@ def update_event(
         response = {
             "message":
                 "Event updated successfully",
+
             "status":
                 True
         }
@@ -2417,6 +2586,7 @@ def delete_event(
         return jsonify({
             "message":
                 "Event deleted successfully",
+
             "status":
                 True
         }), 200
@@ -2456,44 +2626,53 @@ def get_events():
         for doc in documents:
 
             results.append({
+
                 "id":
                     str(
                         doc["_id"]
                     ),
+
                 "_id":
                     str(
                         doc["_id"]
                     ),
+
                 "name":
                     doc.get(
                         "name",
                         ""
                     ),
+
                 "title":
                     doc.get(
                         "title",
                         ""
                     ),
+
                 "start":
                     doc.get(
                         "start",
                         ""
                     ),
+
                 "end":
                     doc.get(
                         "end",
                         ""
                     ),
+
                 "address":
                     doc.get(
                         "address",
                         ""
                     ),
+
                 "description":
                     doc.get(
                         "description",
                         ""
                     ),
+
                 "images": [
                     convert_media_url_to_cloudinary(
                         image
@@ -2503,6 +2682,7 @@ def get_events():
                         []
                     )
                 ],
+
                 "eventImagesId":
                     doc.get(
                         "eventImagesId",
@@ -2513,6 +2693,7 @@ def get_events():
         return jsonify({
             "events":
                 results,
+
             "status":
                 True
         }), 200
@@ -2567,13 +2748,17 @@ def get_event_by_id(
             event["_id"]
         )
 
-        if event.get("created_by"):
+        if event.get(
+            "created_by"
+        ):
 
             event["created_by"] = str(
                 event["created_by"]
             )
 
-        if event.get("created_at"):
+        if event.get(
+            "created_at"
+        ):
 
             event["created_at"] = str(
                 event["created_at"]
@@ -2586,7 +2771,9 @@ def get_event_by_id(
             )
         )
 
-        if event.get("images"):
+        if event.get(
+            "images"
+        ):
 
             event["images"] = [
                 convert_media_url_to_cloudinary(
@@ -2598,6 +2785,7 @@ def get_event_by_id(
         return jsonify({
             "event":
                 event,
+
             "status":
                 True
         }), 200
@@ -2642,7 +2830,7 @@ def generate_presigned_url():
     try:
 
         # -------------------------------------------------
-        # AWS S3
+        # AWS
         # -------------------------------------------------
 
         if AWS_ENABLED and s3_client:
@@ -2653,6 +2841,7 @@ def generate_presigned_url():
                     Params={
                         "Bucket":
                             AWS_BUCKET_NAME,
+
                         "Key":
                             file_name
                     },
@@ -2711,10 +2900,13 @@ def generate_presigned_url():
         return jsonify({
             "url":
                 upload_url,
+
             "file_name":
                 file_name,
+
             "storage":
                 storage,
+
             "status":
                 True
         }), 200
@@ -2852,7 +3044,7 @@ def create_project(
         )
 
         # -------------------------------------------------
-        # CONVERT IMAGES
+        # IMAGES
         # -------------------------------------------------
 
         if isinstance(
@@ -2868,7 +3060,7 @@ def create_project(
             ]
 
         # -------------------------------------------------
-        # CONVERT PDFS
+        # PDFS
         # -------------------------------------------------
 
         project_data["pdfs"] = [
@@ -2897,19 +3089,24 @@ def create_project(
         )
 
         return jsonify({
+
             "message":
                 "Project created successfully",
+
             "project_id":
                 str(
                     result.inserted_id
                 ),
+
             "images":
                 project_data.get(
                     "images",
                     []
                 ),
+
             "pdfs":
                 project_data["pdfs"],
+
             "status":
                 True
         }), 201
@@ -3129,7 +3326,7 @@ def update_project(
             }), 400
 
         # -------------------------------------------------
-        # CONVERT IMAGES
+        # IMAGES
         # -------------------------------------------------
 
         if isinstance(
@@ -3145,7 +3342,7 @@ def update_project(
             ]
 
         # -------------------------------------------------
-        # CONVERT PDFS
+        # PDFS
         # -------------------------------------------------
 
         new_pdfs = [
@@ -3205,15 +3402,19 @@ def update_project(
             }), 404
 
         response = {
+
             "message":
                 "project updated successfully",
+
             "images":
                 project_data.get(
                     "images",
                     []
                 ),
+
             "pdfs":
                 project_data["pdfs"],
+
             "status":
                 True
         }
@@ -3301,6 +3502,7 @@ def delete_project(
         return jsonify({
             "message":
                 "project deleted successfully",
+
             "status":
                 True
         }), 200
@@ -3316,7 +3518,7 @@ def delete_project(
 
 
 # =========================================================
-# GET ALL PROJECTS
+# GET PROJECTS
 # =========================================================
 
 @app.route(
@@ -3445,6 +3647,7 @@ def get_projects():
         return jsonify({
             "projects":
                 results,
+
             "status":
                 True
         }), 200
@@ -3545,7 +3748,7 @@ def get_project_by_id(
         ]
 
         # -------------------------------------------------
-        # NORMALIZE PDFS
+        # PDFS
         # -------------------------------------------------
 
         try:
@@ -3559,10 +3762,6 @@ def get_project_by_id(
         except ValueError:
 
             project_pdfs = []
-
-        # -------------------------------------------------
-        # PDF URLS
-        # -------------------------------------------------
 
         project_pdfs = [
             convert_media_url_to_cloudinary(
@@ -3584,6 +3783,7 @@ def get_project_by_id(
         return jsonify({
             "project":
                 project,
+
             "status":
                 True
         }), 200
@@ -3599,7 +3799,7 @@ def get_project_by_id(
 
 
 # =========================================================
-# APPLICATION START
+# START SERVER
 # =========================================================
 
 if __name__ == "__main__":
@@ -3626,6 +3826,7 @@ if __name__ == "__main__":
     }
 
     print("=" * 60)
+
     print(
         "NGO BACKEND STARTING"
     )
@@ -3644,20 +3845,6 @@ if __name__ == "__main__":
             ).strip()
         )
     )
-
-    if CLOUDINARY_ENABLED:
-
-        print(
-            "Cloudinary cloud:",
-            CLOUDINARY_CLOUD_NAME
-            or "Using CLOUDINARY_URL"
-        )
-
-    else:
-
-        print(
-            "WARNING: Cloudinary is NOT configured!"
-        )
 
     print("=" * 60)
 
