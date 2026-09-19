@@ -11,17 +11,170 @@ function Carousel(props) {
 
   /*
     ----------------------------------------
+    CLEAN CLOUDINARY URL
+    ----------------------------------------
+    Backend/database may contain an old
+    Cloudinary transformation URL.
+
+    Example of bad URL:
+    /image/upload/c_limit,f_auto,q_auto,w_1200/v1/
+    c_limit,f_auto,q_auto,w_1200/v1/projects/...
+
+    We remove all transformation segments and
+    keep the actual Cloudinary public path.
+  */
+  const cleanCloudinaryUrl = (url) => {
+    if (typeof url !== 'string') return ''
+
+    const trimmedUrl = url.trim()
+
+    if (!trimmedUrl) return ''
+
+    if (!trimmedUrl.includes('res.cloudinary.com')) {
+      return trimmedUrl
+    }
+
+    try {
+      const parsedUrl = new URL(trimmedUrl)
+
+      const pathname = parsedUrl.pathname
+
+      /*
+        Cloudinary URL normally looks like:
+
+        /cloud_name/image/upload/v1/projects/...
+
+        or:
+
+        /cloud_name/image/upload/projects/...
+      */
+
+      const uploadMarker = '/upload/'
+
+      const uploadIndex = pathname.indexOf(uploadMarker)
+
+      if (uploadIndex === -1) {
+        return trimmedUrl
+      }
+
+      const beforeUpload =
+        pathname.substring(
+          0,
+          uploadIndex + uploadMarker.length
+        )
+
+      let afterUpload =
+        pathname.substring(
+          uploadIndex + uploadMarker.length
+        )
+
+      /*
+        Remove repeated transformation sections.
+
+        We keep:
+        v1/projects/...
+
+        or:
+        projects/...
+      */
+
+      const parts = afterUpload
+        .split('/')
+        .filter(Boolean)
+
+      const cleanedParts = []
+
+      let foundProjectPath = false
+
+      for (const part of parts) {
+        /*
+          Once we reach projects/, everything after
+          that is the actual public ID/path.
+        */
+        if (part === 'projects') {
+          foundProjectPath = true
+          cleanedParts.push(part)
+          continue
+        }
+
+        if (foundProjectPath) {
+          cleanedParts.push(part)
+          continue
+        }
+
+        /*
+          Ignore Cloudinary transformation values.
+        */
+        if (
+          part === 'c_limit,f_auto,q_auto,w_1200' ||
+          part === 'c_limit,f_auto,q_auto,w_800' ||
+          part === 'c_limit,f_auto,q_auto' ||
+          part.startsWith('c_limit') ||
+          part.startsWith('w_') ||
+          part.startsWith('f_') ||
+          part.startsWith('q_')
+        ) {
+          continue
+        }
+
+        /*
+          Keep version number.
+        */
+        if (/^v\d+$/.test(part)) {
+          if (!cleanedParts.includes(part)) {
+            cleanedParts.push(part)
+          }
+          continue
+        }
+
+        /*
+          If something unexpected appears before
+          projects/, ignore it rather than sending
+          another malformed Cloudinary transformation.
+        */
+      }
+
+      /*
+        If projects/ was found, rebuild the URL.
+      */
+      if (foundProjectPath) {
+        const cleanedPath =
+          beforeUpload +
+          cleanedParts.join('/')
+
+        return (
+          `${parsedUrl.origin}${cleanedPath}` +
+          `${parsedUrl.search || ''}`
+        )
+      }
+
+      return trimmedUrl
+    } catch (error) {
+      console.error(
+        'Cloudinary URL cleaning failed:',
+        error
+      )
+
+      return trimmedUrl
+    }
+  }
+
+  /*
+    ----------------------------------------
     CLEAN IMAGE LIST
     ----------------------------------------
   */
   const validImages = useMemo(() => {
     if (!Array.isArray(images)) return []
 
-    return images.filter(
-      (image) =>
-        typeof image === 'string' &&
-        image.trim() !== ''
-    )
+    return images
+      .filter(
+        (image) =>
+          typeof image === 'string' &&
+          image.trim() !== ''
+      )
+      .map((image) => cleanCloudinaryUrl(image))
+      .filter(Boolean)
   }, [images])
 
   /*
@@ -40,7 +193,10 @@ function Carousel(props) {
     ----------------------------------------
   */
   useEffect(() => {
-    if (currentIndex >= validImages.length) {
+    if (
+      validImages.length > 0 &&
+      currentIndex >= validImages.length
+    ) {
       setCurrentIndex(0)
     }
   }, [currentIndex, validImages.length])
@@ -48,14 +204,24 @@ function Carousel(props) {
   /*
     ----------------------------------------
     CURRENT IMAGE
-
-    IMPORTANT:
-    Do NOT modify Cloudinary URL here.
-
-    Backend already returns the final image URL.
     ----------------------------------------
   */
-  const currentImage = validImages[currentIndex]
+  const currentImage =
+    validImages[currentIndex]
+
+  /*
+    ----------------------------------------
+    DEBUG CLEAN URL
+    ----------------------------------------
+  */
+  useEffect(() => {
+    if (currentImage) {
+      console.log(
+        'FINAL PROJECT IMAGE URL:',
+        currentImage
+      )
+    }
+  }, [currentImage])
 
   /*
     ----------------------------------------
@@ -70,7 +236,8 @@ function Carousel(props) {
         ? 0
         : currentIndex + 1
 
-    const nextImageUrl = validImages[nextIndex]
+    const nextImageUrl =
+      validImages[nextIndex]
 
     if (!nextImageUrl) return
 
@@ -156,11 +323,9 @@ function Carousel(props) {
   if (!currentImage) {
     return (
       <div className='w-full h-full'>
-
         <div
           className={`relative flex w-full ${height} items-center justify-center overflow-hidden bg-gray-100`}
         >
-
           <img
             src='/blank_scenary.png'
             alt='Project'
@@ -170,23 +335,18 @@ function Carousel(props) {
             decoding='async'
             className={`w-full ${height} object-cover`}
           />
-
         </div>
-
       </div>
     )
   }
 
   return (
     <div className='w-full h-full'>
-
       <div
         className={`relative flex w-full ${height} items-center justify-center overflow-hidden bg-gray-100`}
       >
 
-        {/* =========================================
-            LOADING PLACEHOLDER
-        ========================================= */}
+        {/* LOADING PLACEHOLDER */}
         {imageLoading && (
           <div
             className={`absolute inset-0 z-[2] ${height} animate-pulse bg-gray-200`}
@@ -194,9 +354,7 @@ function Carousel(props) {
           />
         )}
 
-        {/* =========================================
-            PROJECT IMAGE
-        ========================================= */}
+        {/* PROJECT IMAGE */}
         <img
           key={currentImage}
           src={currentImage}
@@ -246,17 +404,13 @@ function Carousel(props) {
           }}
         />
 
-        {/* =========================================
-            DARK OVERLAY
-        ========================================= */}
+        {/* DARK OVERLAY */}
         <div
           className='pointer-events-none absolute inset-0 z-[1] bg-black/20'
           aria-hidden='true'
         />
 
-        {/* =========================================
-            PREVIOUS ARROW
-        ========================================= */}
+        {/* PREVIOUS ARROW */}
         {validImages.length > 1 && (
           <button
             type='button'
@@ -281,9 +435,7 @@ function Carousel(props) {
           </button>
         )}
 
-        {/* =========================================
-            NEXT ARROW
-        ========================================= */}
+        {/* NEXT ARROW */}
         {validImages.length > 1 && (
           <button
             type='button'
@@ -302,18 +454,15 @@ function Carousel(props) {
               <path
                 strokeLinecap='round'
                 strokeLinejoin='round'
-                d='m8.25 4.5 7.5 7.5-7.5-7.5'
+                d='m8.25 4.5 7.5 7.5-7.5 7.5'
               />
             </svg>
           </button>
         )}
 
-        {/* =========================================
-            IMAGE INDICATORS
-        ========================================= */}
+        {/* IMAGE INDICATORS */}
         {validImages.length > 1 && (
           <div className='absolute bottom-4 left-1/2 z-[4] flex -translate-x-1/2 gap-2'>
-
             {validImages.map((_, index) => (
               <button
                 key={index}
@@ -337,12 +486,10 @@ function Carousel(props) {
                 }
               />
             ))}
-
           </div>
         )}
 
       </div>
-
     </div>
   )
 }
