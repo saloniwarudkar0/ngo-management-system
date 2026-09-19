@@ -47,81 +47,20 @@ function Carousel(props) {
 
   /*
     ----------------------------------------
-    OPTIMIZE CLOUDINARY IMAGE URL
-    ----------------------------------------
-    The backend already sends Cloudinary URLs.
-    We request a smaller 800px version because
-    the carousel display area is only around 400px high.
-  */
-  const getOptimizedImageUrl = (url) => {
-    if (!url || typeof url !== 'string') {
-      return url
-    }
+    CURRENT IMAGE
 
-    if (!url.includes('res.cloudinary.com')) {
-      return url
-    }
+    IMPORTANT:
+    Do NOT modify Cloudinary URL here.
 
-    try {
-      /*
-        If Cloudinary transformation already exists,
-        replace the width with 800px.
-
-        Example:
-
-        w_1200
-        ↓
-        w_800
-      */
-
-      if (url.includes('w_1200')) {
-        return url.replace(
-          'w_1200',
-          'w_800'
-        )
-      }
-
-      /*
-        If there is a Cloudinary upload URL but no
-        transformation, add optimized transformation.
-      */
-
-      if (url.includes('/image/upload/')) {
-        return url.replace(
-          '/image/upload/',
-          '/image/upload/c_limit,f_auto,q_auto,w_800/'
-        )
-      }
-
-      return url
-    } catch (error) {
-      console.error(
-        'Unable to optimize Cloudinary image URL:',
-        error
-      )
-
-      return url
-    }
-  }
-
-  /*
-    ----------------------------------------
-    OPTIMIZED CURRENT IMAGE
+    Backend already returns the final image URL.
     ----------------------------------------
   */
   const currentImage = validImages[currentIndex]
-
-  const optimizedCurrentImage = getOptimizedImageUrl(
-    currentImage
-  )
 
   /*
     ----------------------------------------
     PRELOAD NEXT IMAGE
     ----------------------------------------
-    When current image loads, preload the next
-    image in the background so clicking Next
-    feels faster.
   */
   useEffect(() => {
     if (validImages.length <= 1) return
@@ -131,13 +70,25 @@ function Carousel(props) {
         ? 0
         : currentIndex + 1
 
-    const nextImageUrl = getOptimizedImageUrl(
-      validImages[nextIndex]
-    )
+    const nextImageUrl = validImages[nextIndex]
 
     if (!nextImageUrl) return
 
     const image = new Image()
+
+    image.onload = () => {
+      console.log(
+        'Next project image preloaded successfully:',
+        nextImageUrl
+      )
+    }
+
+    image.onerror = () => {
+      console.error(
+        'Next project image failed to preload:',
+        nextImageUrl
+      )
+    }
 
     image.src = nextImageUrl
   }, [currentIndex, validImages])
@@ -236,7 +187,6 @@ function Carousel(props) {
         {/* =========================================
             LOADING PLACEHOLDER
         ========================================= */}
-
         {imageLoading && (
           <div
             className={`absolute inset-0 z-[2] ${height} animate-pulse bg-gray-200`}
@@ -247,9 +197,9 @@ function Carousel(props) {
         {/* =========================================
             PROJECT IMAGE
         ========================================= */}
-
         <img
-          src={optimizedCurrentImage}
+          key={currentImage}
+          src={currentImage}
           alt={`Project image ${currentIndex + 1}`}
           width='800'
           height='400'
@@ -270,9 +220,24 @@ function Carousel(props) {
               : 'opacity-100'
           }`}
           onLoad={() => {
+            console.log(
+              'Project image loaded successfully:',
+              currentImage
+            )
+
             setImageLoading(false)
           }}
           onError={(event) => {
+            console.error(
+              'PROJECT IMAGE FAILED TO LOAD:',
+              currentImage
+            )
+
+            console.error(
+              'Image element:',
+              event.currentTarget
+            )
+
             event.currentTarget.onerror = null
             event.currentTarget.src =
               '/blank_scenary.png'
@@ -284,7 +249,6 @@ function Carousel(props) {
         {/* =========================================
             DARK OVERLAY
         ========================================= */}
-
         <div
           className='pointer-events-none absolute inset-0 z-[1] bg-black/20'
           aria-hidden='true'
@@ -293,7 +257,6 @@ function Carousel(props) {
         {/* =========================================
             PREVIOUS ARROW
         ========================================= */}
-
         {validImages.length > 1 && (
           <button
             type='button'
@@ -301,7 +264,6 @@ function Carousel(props) {
             className='absolute left-2 top-1/2 z-[4] -translate-y-1/2 rounded-md bg-black/40 px-2 py-3 text-white transition hover:bg-black/65'
             aria-label='Previous image'
           >
-
             <svg
               xmlns='http://www.w3.org/2000/svg'
               fill='none'
@@ -310,22 +272,18 @@ function Carousel(props) {
               stroke='currentColor'
               className='size-6'
             >
-
               <path
                 strokeLinecap='round'
                 strokeLinejoin='round'
                 d='M15.75 19.5 8.25 12l7.5-7.5'
               />
-
             </svg>
-
           </button>
         )}
 
         {/* =========================================
             NEXT ARROW
         ========================================= */}
-
         {validImages.length > 1 && (
           <button
             type='button'
@@ -333,7 +291,6 @@ function Carousel(props) {
             className='absolute right-2 top-1/2 z-[4] -translate-y-1/2 rounded-md bg-black/40 px-2 py-3 text-white transition hover:bg-black/65'
             aria-label='Next image'
           >
-
             <svg
               xmlns='http://www.w3.org/2000/svg'
               fill='none'
@@ -342,22 +299,18 @@ function Carousel(props) {
               stroke='currentColor'
               className='size-6'
             >
-
               <path
                 strokeLinecap='round'
                 strokeLinejoin='round'
                 d='m8.25 4.5 7.5 7.5-7.5-7.5'
               />
-
             </svg>
-
           </button>
         )}
 
         {/* =========================================
             IMAGE INDICATORS
         ========================================= */}
-
         {validImages.length > 1 && (
           <div className='absolute bottom-4 left-1/2 z-[4] flex -translate-x-1/2 gap-2'>
 
