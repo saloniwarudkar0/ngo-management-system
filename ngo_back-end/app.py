@@ -329,10 +329,17 @@ def set_tenant():
 
     if connection_uri:
 
+        # =================================================
+        # IMPORTANT:
+        # All production domains use the same database.
+        # =================================================
+
         production_tenants = {
             "localhost",
             "127.0.0.1",
-            "ngo-management-systemm.vercel.app"
+            "ngo-management-systemm.vercel.app",
+            "www.jalsmrakshanam.in",
+            "jalsmrakshanam.in"
         }
 
         if tenant_id in production_tenants:
@@ -2332,6 +2339,7 @@ def delete_volunteer(
     return jsonify({
         "message":
             "Data deleted successfully",
+
         "status":
             True
     }), 200
