@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState } from 'react'
 
 import Modal from './Modal/Modal'
@@ -27,6 +28,7 @@ import {
 import { toast } from 'react-hot-toast'
 
 function CreateProject(props) {
+
     const {
         onClose,
         message,
@@ -78,13 +80,20 @@ function CreateProject(props) {
     // =====================================================
 
     useEffect(() => {
-        console.log('mode:', mode, 'projectId:', projectId)
+
+        console.log(
+            'mode:',
+            mode,
+            'projectId:',
+            projectId
+        )
 
         if (mode === 'Edit' && projectId) {
             getProject()
         } else {
             setLoading(false)
         }
+
     }, [mode, projectId])
 
     // =====================================================
@@ -92,7 +101,11 @@ function CreateProject(props) {
     // =====================================================
 
     const notification = (msg, type) => {
-        toast[type](msg)
+        if (toast[type]) {
+            toast[type](msg)
+        } else {
+            toast(msg)
+        }
     }
 
     // =====================================================
@@ -100,7 +113,9 @@ function CreateProject(props) {
     // =====================================================
 
     const getProject = async () => {
+
         try {
+
             setLoading(true)
 
             const res = await getProjectById(projectId)
@@ -108,111 +123,195 @@ function CreateProject(props) {
             console.log('Project of id:', res)
 
             if (res?.status) {
+
                 const project = res?.project || {}
 
-                // Basic details
+                // ---------------------------------------------
+                // BASIC DETAILS
+                // ---------------------------------------------
+
                 setProjectName(project.name || '')
                 setAddress(project.address || '')
                 setProjectStartDate(project.start || '')
                 setProjectEndDate(project.end || '')
                 setDescription(project.description || '')
 
-                // Existing images
+                // ---------------------------------------------
+                // EXISTING IMAGES
+                // ---------------------------------------------
+
                 setExistingImages(
                     Array.isArray(project.images)
                         ? project.images
                         : []
                 )
 
-                // Project image folder ID
+                // ---------------------------------------------
+                // PROJECT IMAGE FOLDER ID
+                // ---------------------------------------------
+
                 setProjectImageId(
                     project.projectImagesId || uuidv4()
                 )
 
-                // =================================================
+                // ---------------------------------------------
                 // EXISTING PDFS
-                // =================================================
+                // ---------------------------------------------
 
                 let oldPdfs = []
 
                 if (Array.isArray(project.pdfs)) {
-                    oldPdfs = project.pdfs.filter(Boolean)
+
+                    oldPdfs = project.pdfs.filter(
+                        pdf => typeof pdf === 'string' && pdf.trim()
+                    )
+
                 } else if (project.pdf) {
+
                     oldPdfs = [project.pdf]
+
                 }
 
                 oldPdfs = oldPdfs.slice(0, 3)
 
                 setExistingPdfs(oldPdfs)
                 setPdfsToDelete([])
+
             } else {
+
                 notification(
                     'Unable to find project',
                     'error'
                 )
+
             }
+
         } catch (error) {
-            console.error('Get project error:', error)
+
+            console.error(
+                'Get project error:',
+                error
+            )
 
             notification(
                 'Unable to load project',
                 'error'
             )
+
         } finally {
+
             setLoading(false)
+
         }
     }
 
     // =====================================================
     // UPLOAD FILE
-    // IMPORTANT:
-    // Backend uploads file to Cloudinary and returns:
-    // { url: "https://res.cloudinary.com/..." }
+    // =====================================================
     //
-    // We return that direct Cloudinary URL.
+    // IMPORTANT:
+    // Backend endpoint expects RAW FILE DATA in PUT body.
+    //
+    // We are NOT using FormData here.
+    //
+    // Flask receives the file bytes and uploads them to
+    // Cloudinary.
     // =====================================================
 
     const uploadFile = async (file, url) => {
+
         try {
+
+            if (!file) {
+                throw new Error('No file selected.')
+            }
+
+            if (!url) {
+                throw new Error('Upload URL is missing.')
+            }
+
+            console.log(
+                'Uploading file:',
+                file.name,
+                'to:',
+                url
+            )
+
             const res = await fetch(url, {
                 method: 'PUT',
-                body: file
+                body: file,
+                headers: {
+                    'Content-Type':
+                        file.type || 'application/octet-stream'
+                }
             })
 
+            console.log(
+                'Upload response status:',
+                res.status
+            )
+
+            const responseText = await res.text()
+
+            let data = {}
+
+            try {
+                data = responseText
+                    ? JSON.parse(responseText)
+                    : {}
+            } catch (parseError) {
+
+                console.error(
+                    'Unable to parse upload response:',
+                    responseText
+                )
+
+                throw new Error(
+                    'Server returned an invalid upload response.'
+                )
+            }
+
             if (!res.ok) {
+
                 console.error(
                     'File upload failed:',
                     res.status,
-                    res.statusText
+                    data
                 )
 
-                return null
+                throw new Error(
+                    data?.error ||
+                    `File upload failed with status ${res.status}`
+                )
             }
 
-            // Backend returns JSON containing direct Cloudinary URL
-            const data = await res.json()
-
-            console.log('Cloudinary upload response:', data)
-
-            if (data?.url) {
-                return {
-                    response: res,
-                    url: data.url
-                }
-            }
-
-            console.error(
-                'Upload succeeded but no final URL was returned.'
+            console.log(
+                'Upload response from backend:',
+                data
             )
 
-            return null
+            if (!data?.url) {
+
+                throw new Error(
+                    'Upload succeeded but server did not return a file URL.'
+                )
+            }
+
+            return {
+                response: res,
+                url: data.url,
+                originalUrl: data.original_url || data.url,
+                storage: data.storage
+            }
+
         } catch (error) {
+
             console.error(
                 'File upload error:',
                 error
             )
 
-            return null
+            throw error
         }
     }
 
@@ -221,7 +320,9 @@ function CreateProject(props) {
     // =====================================================
 
     const validateDates = (start, end) => {
+
         if (!start || !end) {
+
             setDateError(
                 'Please select both start and end dates.'
             )
@@ -230,6 +331,7 @@ function CreateProject(props) {
         }
 
         if (moment(end).isBefore(moment(start))) {
+
             setDateError(
                 'End date cannot be earlier than start date.'
             )
@@ -247,26 +349,31 @@ function CreateProject(props) {
     // =====================================================
 
     const uploadPdf = async (pdf, index) => {
+
+        if (!pdf) {
+            throw new Error('Invalid PDF file.')
+        }
+
         const originalName =
             pdf.name || 'project-document.pdf'
 
+        // Remove only the .pdf extension
         const fileNameWithoutExtension =
-            originalName.replace(
-                /\.pdf$/i,
-                ''
-            )
+            originalName.replace(/\.pdf$/i, '')
 
         const parsedFileName =
-            ensureUrlSafety(
-                fileNameWithoutExtension
-            )
+            ensureUrlSafety(fileNameWithoutExtension)
 
         const parsedProjectName =
-            ensureUrlSafety(
-                projectName
-            )
+            ensureUrlSafety(projectName)
 
         const uniqueId = uuidv4()
+
+        // -------------------------------------------------
+        // IMPORTANT:
+        // PDFs are stored inside the same project folder.
+        // Backend detects .pdf and uploads it as Cloudinary RAW.
+        // -------------------------------------------------
 
         const key =
             `projects/${projectImageId}/pdf/${uniqueId}_${index + 1}_${parsedFileName}_${parsedProjectName}.pdf`
@@ -276,16 +383,30 @@ function CreateProject(props) {
             key
         )
 
+        // -------------------------------------------------
+        // GET UPLOAD URL
+        // -------------------------------------------------
+
         const tempUrl =
             await getPresignedUrl({
-                key
+                key: key
             })
 
+        console.log(
+            'PDF upload URL response:',
+            tempUrl
+        )
+
         if (!tempUrl || !tempUrl.url) {
+
             throw new Error(
                 `Failed to get upload URL for ${pdf.name}`
             )
         }
+
+        // -------------------------------------------------
+        // UPLOAD ACTUAL PDF FILE
+        // -------------------------------------------------
 
         const uploadResult =
             await uploadFile(
@@ -297,6 +418,7 @@ function CreateProject(props) {
             !uploadResult ||
             !uploadResult.url
         ) {
+
             throw new Error(
                 `Failed to upload PDF ${pdf.name}`
             )
@@ -307,9 +429,12 @@ function CreateProject(props) {
             uploadResult.url
         )
 
+        // -------------------------------------------------
         // IMPORTANT:
-        // Save direct Cloudinary URL,
-        // NOT backend /api/local-files URL.
+        // Save Cloudinary URL in MongoDB.
+        // Do NOT save /api/local-files URL.
+        // -------------------------------------------------
+
         return removeQueryParameters(
             uploadResult.url
         )
@@ -320,28 +445,40 @@ function CreateProject(props) {
     // =====================================================
 
     const handleSubmit = async (e) => {
+
         e.preventDefault()
+
+        if (loading || disabled) {
+            return
+        }
 
         setLoading(true)
         setError('')
 
-        // Validate dates
+        // -------------------------------------------------
+        // VALIDATE DATES
+        // -------------------------------------------------
+
         if (
             !validateDates(
                 projectStartDate,
                 projectEndDate
             )
         ) {
+
             setLoading(false)
+
             return
         }
 
         try {
+
             // =================================================
             // CREATE PROJECT
             // =================================================
 
             if (mode === 'Create') {
+
                 const imagesUrl = []
 
                 // ---------------------------------------------
@@ -349,34 +486,36 @@ function CreateProject(props) {
                 // ---------------------------------------------
 
                 await Promise.all(
+
                     files.map(async (file) => {
+
                         const parsedFileName =
-                            ensureUrlSafety(
-                                file.name
-                            )
+                            ensureUrlSafety(file.name)
 
                         const parsedExtension =
-                            getExtension(
-                                file.name
-                            )
+                            getExtension(file.name)
 
                         const parsedProjectName =
-                            ensureUrlSafety(
-                                projectName
-                            )
+                            ensureUrlSafety(projectName)
 
                         const key =
                             `projects/${projectImageId}/images/${parsedFileName}_${parsedProjectName}.${parsedExtension}`
 
+                        console.log(
+                            'Uploading image with key:',
+                            key
+                        )
+
                         const tempUrl =
                             await getPresignedUrl({
-                                key
+                                key: key
                             })
 
                         if (
                             !tempUrl ||
                             !tempUrl.url
                         ) {
+
                             throw new Error(
                                 `Failed to get upload URL for ${file.name}`
                             )
@@ -392,13 +531,12 @@ function CreateProject(props) {
                             !uploadResult ||
                             !uploadResult.url
                         ) {
+
                             throw new Error(
                                 `Failed to upload image ${file.name}`
                             )
                         }
 
-                        // IMPORTANT:
-                        // Save direct Cloudinary URL
                         const fileUrl =
                             removeQueryParameters(
                                 uploadResult.url
@@ -409,9 +547,8 @@ function CreateProject(props) {
                             fileUrl
                         )
 
-                        imagesUrl.push(
-                            fileUrl
-                        )
+                        imagesUrl.push(fileUrl)
+
                     })
                 )
 
@@ -420,6 +557,7 @@ function CreateProject(props) {
                 // ---------------------------------------------
 
                 if (pdfFiles.length > 3) {
+
                     throw new Error(
                         'A project can have maximum 3 PDFs.'
                     )
@@ -431,6 +569,7 @@ function CreateProject(props) {
 
                 const uploadedPdfResults =
                     await Promise.all(
+
                         pdfFiles.map(
                             (pdf, index) =>
                                 uploadPdf(
@@ -445,20 +584,24 @@ function CreateProject(props) {
                 // ---------------------------------------------
 
                 const finalProject = {
+
                     name: projectName,
+
                     title: projectName,
+
                     start: projectStartDate,
+
                     end: projectEndDate,
+
                     address: address,
+
                     description: description,
 
-                    // Direct Cloudinary image URLs
                     images: imagesUrl,
 
                     projectImagesId:
                         projectImageId,
 
-                    // Direct Cloudinary PDF URLs
                     pdfs: uploadedPdfResults
                 }
 
@@ -477,13 +620,16 @@ function CreateProject(props) {
                     )
 
                 if (res?.status) {
+
                     notification(
                         'Project created successfully',
                         'success'
                     )
 
                     onClose()
+
                 } else {
+
                     setError(
                         res?.error ||
                         'Something went wrong'
@@ -496,6 +642,7 @@ function CreateProject(props) {
             // =================================================
 
             if (mode === 'Edit') {
+
                 // ---------------------------------------------
                 // EXISTING IMAGES
                 // ---------------------------------------------
@@ -509,34 +656,36 @@ function CreateProject(props) {
                 // ---------------------------------------------
 
                 await Promise.all(
+
                     files.map(async (file) => {
+
                         const parsedFileName =
-                            ensureUrlSafety(
-                                file.name
-                            )
+                            ensureUrlSafety(file.name)
 
                         const parsedExtension =
-                            getExtension(
-                                file.name
-                            )
+                            getExtension(file.name)
 
                         const parsedProjectName =
-                            ensureUrlSafety(
-                                projectName
-                            )
+                            ensureUrlSafety(projectName)
 
                         const key =
                             `projects/${projectImageId}/images/${parsedFileName}_${parsedProjectName}.${parsedExtension}`
 
+                        console.log(
+                            'Uploading new image with key:',
+                            key
+                        )
+
                         const tempUrl =
                             await getPresignedUrl({
-                                key
+                                key: key
                             })
 
                         if (
                             !tempUrl ||
                             !tempUrl.url
                         ) {
+
                             throw new Error(
                                 `Failed to get upload URL for ${file.name}`
                             )
@@ -552,13 +701,12 @@ function CreateProject(props) {
                             !uploadResult ||
                             !uploadResult.url
                         ) {
+
                             throw new Error(
                                 `Failed to upload image ${file.name}`
                             )
                         }
 
-                        // IMPORTANT:
-                        // Direct Cloudinary URL
                         const fileUrl =
                             removeQueryParameters(
                                 uploadResult.url
@@ -569,9 +717,8 @@ function CreateProject(props) {
                             fileUrl
                         )
 
-                        imagesUrl.push(
-                            fileUrl
-                        )
+                        imagesUrl.push(fileUrl)
+
                     })
                 )
 
@@ -592,6 +739,7 @@ function CreateProject(props) {
                     pdfFiles.length >
                     3
                 ) {
+
                     throw new Error(
                         'A project can have maximum 3 PDFs.'
                     )
@@ -603,6 +751,7 @@ function CreateProject(props) {
 
                 const uploadedNewPdfs =
                     await Promise.all(
+
                         pdfFiles.map(
                             (
                                 pdf,
@@ -624,6 +773,7 @@ function CreateProject(props) {
                 // ---------------------------------------------
 
                 if (finalPdfs.length > 3) {
+
                     throw new Error(
                         'A project can have maximum 3 PDFs.'
                     )
@@ -634,27 +784,29 @@ function CreateProject(props) {
                 // ---------------------------------------------
 
                 const finalProject = {
+
                     name: projectName,
+
                     title: projectName,
+
                     start: projectStartDate,
+
                     end: projectEndDate,
+
                     address: address,
+
                     description: description,
 
-                    // Existing + new direct Cloudinary URLs
                     images: imagesUrl,
 
                     projectImagesId:
                         projectImageId,
 
-                    // Existing + new direct Cloudinary URLs
                     pdfs: finalPdfs,
 
-                    // Images to delete
                     imageTobeDeleted:
                         imagesToDelete,
 
-                    // PDFs to delete
                     pdfsToDelete:
                         pdfsToDelete
                 }
@@ -675,37 +827,45 @@ function CreateProject(props) {
                     )
 
                 if (res?.status) {
+
                     notification(
                         'Project updated successfully',
                         'success'
                     )
 
                     onClose()
+
                 } else {
+
                     setError(
                         res?.error ||
                         'Something went wrong'
                     )
                 }
             }
+
         } catch (error) {
+
             console.error(
                 'Project submit error:',
                 error
             )
 
-            setError(
+            const errorMessage =
                 error?.message ||
                 'Something went wrong while uploading files.'
-            )
+
+            setError(errorMessage)
 
             notification(
-                error?.message ||
-                'Something went wrong',
+                errorMessage,
                 'error'
             )
+
         } finally {
+
             if (setToggleReload) {
+
                 setToggleReload(
                     !toggleReload
                 )
@@ -720,6 +880,7 @@ function CreateProject(props) {
     // =====================================================
 
     const handleFile = (e) => {
+
         const newFiles =
             e.target.files
 
@@ -730,6 +891,7 @@ function CreateProject(props) {
             i < newFiles.length;
             i++
         ) {
+
             const file =
                 newFiles[i]
 
@@ -747,7 +909,9 @@ function CreateProject(props) {
                     fileType
                 )
             ) {
+
                 let tempFile = {
+
                     id:
                         i +
                         'ABC' +
@@ -773,6 +937,7 @@ function CreateProject(props) {
                     files.length === 0 &&
                     i === 0
                 ) {
+
                     tempFile = {
                         ...tempFile,
                         isPrimary: true
@@ -782,7 +947,9 @@ function CreateProject(props) {
                 tempFileArray.push(
                     tempFile
                 )
+
             } else {
+
                 notification(
                     'Only JPG, PNG and GIF images are allowed.',
                     'error'
@@ -803,6 +970,7 @@ function CreateProject(props) {
     // =====================================================
 
     const handlePdfFile = (e) => {
+
         const selectedFiles =
             Array.from(
                 e.target.files || []
@@ -813,6 +981,10 @@ function CreateProject(props) {
         ) {
             return
         }
+
+        // ---------------------------------------------
+        // CURRENT PDF COUNT
+        // ---------------------------------------------
 
         const currentPdfCount =
             existingPdfs.length +
@@ -825,6 +997,7 @@ function CreateProject(props) {
         if (
             availableSlots <= 0
         ) {
+
             notification(
                 'This project already has 3 PDFs.',
                 'error'
@@ -834,6 +1007,10 @@ function CreateProject(props) {
 
             return
         }
+
+        // ---------------------------------------------
+        // ONLY TAKE AVAILABLE SLOTS
+        // ---------------------------------------------
 
         const filesToCheck =
             selectedFiles.slice(
@@ -845,6 +1022,7 @@ function CreateProject(props) {
             selectedFiles.length >
             availableSlots
         ) {
+
             notification(
                 `Only ${availableSlots} PDF slot(s) available. Maximum 3 PDFs allowed.`,
                 'error'
@@ -857,6 +1035,11 @@ function CreateProject(props) {
             const selectedFile
             of filesToCheck
         ) {
+
+            // -----------------------------------------
+            // PDF TYPE CHECK
+            // -----------------------------------------
+
             const isPdf =
                 selectedFile.type ===
                     'application/pdf' ||
@@ -865,6 +1048,7 @@ function CreateProject(props) {
                     .endsWith('.pdf')
 
             if (!isPdf) {
+
                 notification(
                     `${selectedFile.name} is not a PDF.`,
                     'error'
@@ -872,6 +1056,10 @@ function CreateProject(props) {
 
                 continue
             }
+
+            // -----------------------------------------
+            // FILE SIZE CHECK
+            // -----------------------------------------
 
             const maxSize =
                 10 *
@@ -882,6 +1070,7 @@ function CreateProject(props) {
                 selectedFile.size >
                 maxSize
             ) {
+
                 notification(
                     `${selectedFile.name} is larger than 10 MB.`,
                     'error'
@@ -910,6 +1099,7 @@ function CreateProject(props) {
     // =====================================================
 
     const removeNewPdf = (index) => {
+
         setPdfFiles(
             previousFiles =>
                 previousFiles.filter(
@@ -924,8 +1114,10 @@ function CreateProject(props) {
     // =====================================================
 
     const removeExistingPdf = (pdf) => {
+
         setPdfsToDelete(
             previousPdfs => {
+
                 if (
                     previousPdfs.includes(
                         pdf
@@ -963,10 +1155,14 @@ function CreateProject(props) {
         file,
         existing = false
     ) => {
+
         if (existing) {
+
             setImagesToDelete(
                 previousImages => [
+
                     ...previousImages,
+
                     file
                 ]
             )
@@ -992,12 +1188,16 @@ function CreateProject(props) {
                         p1,
                         index
                     ) => {
+
                         if (
                             file.isPrimary &&
                             index === 0
                         ) {
+
                             return {
+
                                 ...p1,
+
                                 isPrimary: true
                             }
                         }
@@ -1021,26 +1221,34 @@ function CreateProject(props) {
     // =====================================================
 
     return (
+
         <Modal>
+
             <Card
                 header={pageTitle}
                 close={onClose}
             >
+
                 {message ? (
+
                     <div className="p-5 text-center w-[300px]">
                         {message}
                     </div>
+
                 ) : (
+
                     <form
                         onSubmit={
                             handleSubmit
                         }
                     >
+
                         {/* ========================================= */}
                         {/* PROJECT NAME */}
                         {/* ========================================= */}
 
                         <div className="flex space-x-2 mt-3">
+
                             <Input
                                 id="Project Name"
                                 value={
@@ -1056,6 +1264,7 @@ function CreateProject(props) {
                                     true
                                 }
                             />
+
                         </div>
 
                         {/* ========================================= */}
@@ -1063,11 +1272,15 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="flex gap-2 w-1/2 mt-3">
+
                             <div className="w-full">
+
                                 <DateTimePicker
+
                                     onChange={(
                                         val
                                     ) => {
+
                                         const parsedDate =
                                             moment(
                                                 val,
@@ -1077,6 +1290,7 @@ function CreateProject(props) {
                                         if (
                                             parsedDate.isValid()
                                         ) {
+
                                             setProjectStartDate(
                                                 parsedDate.format(
                                                     'YYYY-MM-DD'
@@ -1084,6 +1298,7 @@ function CreateProject(props) {
                                             )
                                         }
                                     }}
+
                                     value={
                                         projectStartDate
                                             ? moment(
@@ -1094,18 +1309,24 @@ function CreateProject(props) {
                                             )
                                             : ''
                                     }
+
                                     label="Start Date"
+
                                     required={
                                         true
                                     }
                                 />
+
                             </div>
 
                             <div className="w-full">
+
                                 <DateTimePicker
+
                                     onChange={(
                                         val
                                     ) => {
+
                                         const parsedDate =
                                             moment(
                                                 val,
@@ -1115,6 +1336,7 @@ function CreateProject(props) {
                                         if (
                                             parsedDate.isValid()
                                         ) {
+
                                             setProjectEndDate(
                                                 parsedDate.format(
                                                     'YYYY-MM-DD'
@@ -1122,6 +1344,7 @@ function CreateProject(props) {
                                             )
                                         }
                                     }}
+
                                     value={
                                         projectEndDate
                                             ? moment(
@@ -1132,12 +1355,16 @@ function CreateProject(props) {
                                             )
                                             : ''
                                     }
+
                                     label="End Date"
+
                                     required={
                                         true
                                     }
                                 />
+
                             </div>
+
                         </div>
 
                         {/* ========================================= */}
@@ -1145,8 +1372,11 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         {dateError && (
+
                             <div className="text-[12px] text-red-500 mt-1">
+
                                 *Error: {dateError}
+
                             </div>
                         )}
 
@@ -1155,21 +1385,29 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="flex space-x-2 mt-3">
+
                             <TextArea
+
                                 id="Address"
+
                                 value={
                                     address
                                 }
+
                                 onChange={
                                     setAddress
                                 }
+
                                 disabled={
                                     disabled
                                 }
+
                                 required={
                                     true
                                 }
+
                             />
+
                         </div>
 
                         {/* ========================================= */}
@@ -1177,21 +1415,29 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="flex space-x-2 mt-3">
+
                             <TextArea
+
                                 id="Description"
+
                                 value={
                                     description
                                 }
+
                                 onChange={
                                     setDescription
                                 }
+
                                 disabled={
                                     disabled
                                 }
+
                                 required={
                                     true
                                 }
+
                             />
+
                         </div>
 
                         {/* ========================================= */}
@@ -1199,20 +1445,27 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="flex space-x-2 mt-3 w-full">
+
                             <ImageInputPills
+
                                 handleFile={
                                     handleFile
                                 }
+
                                 files={
                                     files
                                 }
+
                                 imagePillRemove={
                                     imagePillRemove
                                 }
+
                                 existingImages={
                                     existingImages
                                 }
+
                             />
+
                         </div>
 
                         {/* ========================================= */}
@@ -1220,14 +1473,21 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="mt-5 w-full">
+
                             <div className="flex items-center justify-between mb-2">
+
                                 <label className="block text-sm font-medium text-gray-700">
+
                                     Project PDFs
+
                                 </label>
 
                                 <span className="text-xs font-semibold text-gray-500">
+
                                     {totalPdfCount}/3
+
                                 </span>
+
                             </div>
 
                             <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
@@ -1235,17 +1495,23 @@ function CreateProject(props) {
                                 {/* FILE INPUT */}
 
                                 <input
+
                                     type="file"
+
                                     accept=".pdf,application/pdf"
+
                                     multiple
+
                                     onChange={
                                         handlePdfFile
                                     }
+
                                     disabled={
                                         disabled ||
                                         loading ||
                                         totalPdfCount >= 3
                                     }
+
                                     className="
                                         block w-full text-sm text-gray-700
                                         file:mr-4 file:py-2 file:px-4
@@ -1258,25 +1524,37 @@ function CreateProject(props) {
                                 />
 
                                 <p className="text-xs text-gray-500 mt-2">
+
                                     Upload maximum 3 PDF files.
                                     Each PDF must be less than 10 MB.
+
                                 </p>
 
                                 {/* AVAILABLE SLOTS */}
 
                                 {totalPdfCount < 3 && (
+
                                     <p className="text-xs text-green-600 mt-1">
-                                        {3 - totalPdfCount} PDF slot
+
+                                        {3 - totalPdfCount}
+                                        {' '}
+                                        PDF slot
                                         {3 - totalPdfCount !== 1
                                             ? 's'
                                             : ''
-                                        } remaining.
+                                        }
+                                        {' '}
+                                        remaining.
+
                                     </p>
                                 )}
 
                                 {totalPdfCount >= 3 && (
+
                                     <p className="text-xs text-orange-600 mt-1 font-medium">
+
                                         Maximum 3 PDFs reached.
+
                                     </p>
                                 )}
 
@@ -1285,9 +1563,13 @@ function CreateProject(props) {
                                 {/* ========================================= */}
 
                                 {existingPdfs.length > 0 && (
+
                                     <div className="mt-4">
+
                                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+
                                             Existing PDFs
+
                                         </p>
 
                                         {existingPdfs.map(
@@ -1295,47 +1577,78 @@ function CreateProject(props) {
                                                 pdf,
                                                 index
                                             ) => (
+
                                                 <div
+
                                                     key={`existing-${index}-${pdf}`}
+
                                                     className="mt-2 flex items-center justify-between bg-white border rounded-md p-3"
+
                                                 >
+
                                                     <div className="flex items-center gap-2 min-w-0">
+
                                                         <span className="text-red-500 text-lg shrink-0">
+
                                                             📄
+
                                                         </span>
 
                                                         <div className="min-w-0">
+
                                                             <p className="text-sm font-medium text-gray-700">
+
                                                                 Project PDF {index + 1}
+
                                                             </p>
 
                                                             <a
+
                                                                 href={pdf}
+
                                                                 target="_blank"
+
                                                                 rel="noopener noreferrer"
+
                                                                 className="text-xs text-blue-600 hover:underline"
+
                                                             >
+
                                                                 View PDF
+
                                                             </a>
+
                                                         </div>
+
                                                     </div>
 
                                                     {mode === 'Edit' && (
+
                                                         <button
+
                                                             type="button"
+
                                                             onClick={() =>
                                                                 removeExistingPdf(
                                                                     pdf
                                                                 )
                                                             }
+
                                                             className="ml-3 shrink-0 text-red-500 hover:text-red-700 text-sm"
+
                                                         >
+
                                                             Remove
+
                                                         </button>
+
                                                     )}
+
                                                 </div>
+
                                             )
                                         )}
+
                                     </div>
                                 )}
 
@@ -1344,9 +1657,13 @@ function CreateProject(props) {
                                 {/* ========================================= */}
 
                                 {pdfFiles.length > 0 && (
+
                                     <div className="mt-4">
+
                                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+
                                             New PDFs
+
                                         </p>
 
                                         {pdfFiles.map(
@@ -1354,21 +1671,33 @@ function CreateProject(props) {
                                                 pdf,
                                                 index
                                             ) => (
+
                                                 <div
+
                                                     key={`new-${index}-${pdf.name}`}
+
                                                     className="mt-2 flex items-center justify-between bg-white border rounded-md p-3"
+
                                                 >
+
                                                     <div className="flex items-center gap-2 min-w-0">
+
                                                         <span className="text-red-500 text-lg shrink-0">
+
                                                             📄
+
                                                         </span>
 
                                                         <div className="min-w-0">
+
                                                             <p className="text-sm font-medium text-gray-700 truncate max-w-[220px]">
+
                                                                 {pdf.name}
+
                                                             </p>
 
                                                             <p className="text-xs text-gray-500">
+
                                                                 {
                                                                     (
                                                                         pdf.size /
@@ -1376,31 +1705,45 @@ function CreateProject(props) {
                                                                             1024 *
                                                                             1024
                                                                         )
-                                                                    ).toFixed(
-                                                                        2
-                                                                    )
-                                                                } MB
+                                                                    ).toFixed(2)
+                                                                }
+                                                                {' '}
+                                                                MB
+
                                                             </p>
+
                                                         </div>
+
                                                     </div>
 
                                                     <button
+
                                                         type="button"
+
                                                         onClick={() =>
                                                             removeNewPdf(
                                                                 index
                                                             )
                                                         }
+
                                                         className="ml-3 shrink-0 text-red-500 hover:text-red-700 text-sm"
+
                                                     >
+
                                                         Remove
+
                                                     </button>
+
                                                 </div>
+
                                             )
                                         )}
+
                                     </div>
                                 )}
+
                             </div>
+
                         </div>
 
                         {/* ========================================= */}
@@ -1408,8 +1751,11 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         {error && (
+
                             <div className="text-red-500 text-sm mt-3">
+
                                 {error}
+
                             </div>
                         )}
 
@@ -1418,30 +1764,41 @@ function CreateProject(props) {
                         {/* ========================================= */}
 
                         <div className="flex justify-center mt-5">
+
                             {mode === 'view'
                                 ? ''
                                 : (
+
                                     <button
+
                                         type="submit"
+
                                         className="bg-blue-500 disabled:bg-blue-300 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+
                                         disabled={
                                             loading ||
                                             disabled
                                         }
+
                                     >
+
                                         {loading
                                             ? 'Saving...'
                                             : 'Submit'
                                         }
+
                                     </button>
                                 )}
+
                         </div>
+
                     </form>
                 )}
+
             </Card>
+
         </Modal>
     )
 }
 
 export default CreateProject
-
